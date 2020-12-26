@@ -22,27 +22,23 @@ END_BOTTON      = LIMIT_SCREEN - 1
 ;           VARIAVEIS RAM ($0080-$00FF)(128B)
 
 
-PosY_UP_Player0 = $0080
+PosY_UP_Player0   = $0080
 
-PosY_DN_Player0 = $0081
+PosY_DN_Player0   = $0081
 
-PosY_UP_Player1 = $0082
+PosX_Player0      = $0082
 
-PosY_DN_Player1 = $0083
+SpriteP0_Control  = $0083
 
-PosX_Player0    = $0084
+Frames_Pass       = $0084
 
-PosX_Player1    = $0085
+Scan_delay        = $0085
 
-SpriteP0_Control  = $0086
+Respawn_P0        = $0086
 
-SpriteP1_Control  = $0087
-
-Frames_Pass       = $0088
-
-Color_PF          = $0089
-
-Scan_delay        = $0090
+Register_user     = $0087
+          ;(0-bit - Delay use in moviment H)
+          ;(1-bit - Delay use in moviment V)
 
 ;===================================================================
 ;===================================================================
@@ -51,28 +47,25 @@ Scan_delay        = $0090
 
 Boot_Game:
     ; Setando variáveis na memory RAM
-    LDA   #100
+    LDA   #84
     STA   PosY_UP_Player0
-    LDA   #60
-    STA   PosY_UP_Player1
-    LDA   #123
+    LDA   #107
     STA   PosY_DN_Player0
-    LDA   #83
-    STA   PosY_DN_Player1
-    LDA   #4
-    STA   PosX_Player0
 
     LDA   #0
     STA   Frames_Pass
+    STA   Respawn_P0
+    STA   PosX_Player0
+
                       ; Setando zero em alguns registradores de "video"
                       ; E/Dis nable(BALL, Missiles and Players)
     STA   ENABL
     STA   ENAM0
     STA   ENAM1
     ;STA   GRP0
-    STA   GRP1
+    ;STA   GRP1
                       ; Registradores de Movimento Horizontal
-    STA   HMCLR
+    ;STA   HMCLR
     ;STA   HMP0
     ;STA   HMP1
     ;STA   HMM0
@@ -80,7 +73,7 @@ Boot_Game:
     ;STA   HMBL
                       ; Color Player AND reset pos register
     ;STA   COLUP0
-    STA   COLUP1
+    ;STA   COLUP1
     STA   RESP0
     STA   RESP1
                       ; Playfield's
@@ -93,19 +86,19 @@ Boot_Game:
 
     LDA   #$CA
     STA   COLUPF      ; Playfield collor
-    STA   Color_PF
 
     LDA   #$32
     STA   COLUP0
-
-    LDA   #$A4
+    LDA   #$C2
     STA   COLUP1
 
     LDA   #1
     STA   CTRLPF
 
-    LDA  #$08
-    STA  REFP1
+    ;LDA  #$08
+    ;STA  REFP1
+    ;LDA  #$05
+    ;STA  RESP0
 
 ;=============================================================================================
 
@@ -113,6 +106,10 @@ StartFrame:
     LDA   #37
     STA   Scan_delay
     STA   HMCLR
+
+    LDA   #0
+    STA   Register_user
+
 
     LDA   #$02  ; Vertical sync is signaled by VSYNC's bit 1...
     STA   VSYNC
@@ -124,41 +121,49 @@ StartFrame:
     LDY   Frames_Pass
     INY
     CPY   #1                    ; Nº Frames necessário para ativar movimentação.
-    BNE   Not_move
+    BNE   Long_Jmp
     LDY   #0
 
 ;Mup
+    LDA   #TOP_BORD             ; Nível Máximo de subida
+    ADC   #2
+    CMP   PosY_UP_Player0
+    BCS   MDown
+
     LDA   SWCHA
     AND   #$10
     BNE   MDown
 
-    LDX   #TOP_BORD             ; Nível Máximo de subida
-    INX
-    INX
-    CPX   PosY_UP_Player0
-    BEQ   Sync_delay1
+    DEC   PosY_UP_Player0
+    DEC   PosY_UP_Player0
+    DEC   PosY_DN_Player0
+    DEC   PosY_DN_Player0
 
-    dec   PosY_UP_Player0
-    dec   PosY_DN_Player0
-    INC   Scan_delay
-    JMP   MDown
+    LDA   #1
+    STA   Register_user
 
-Sync_delay1:                    ; Verificador de atraso
-    INC   Scan_delay
 MDown:
+    LDA   #START_BOTTON         ; Nível Mínimo de Descida
+    CMP   PosY_DN_Player0
+    BCC   Mleft
+
     LDA   SWCHA
     AND   #$20
     BNE   Mleft
 
-    LDX   #START_BOTTON         ; Nível Mínimo de Descida
-    CPX   PosY_DN_Player0
-    BEQ   Mleft
-
+    INC   PosY_UP_Player0
     INC   PosY_UP_Player0
     INC   PosY_DN_Player0
-    INC   Scan_delay
+    INC   PosY_DN_Player0
+
+    LDA   #1
+    STA   Register_user
 
 Mleft:
+    LDA   PosX_Player0
+    CMP   #0
+    BEQ   Mright
+
     LDA   SWCHA
     AND   #$40
     BNE   Mright
@@ -166,14 +171,24 @@ Mleft:
     LDA   #$08
     STA   REFP0
     LDA   #$10
+    DEC   PosX_Player0
     STA   HMP0
 
-    LDA   Scan_delay          ; Verificador de atraso
-    CMP   #37
-    BNE   Mright
-    INC   Scan_delay
+    LDA  #1
+    AND  Register_user
+    BEQ  Mright
+    DEC  Scan_delay
+
+    JMP   Mright
+
+Long_Jmp:
+    JMP   Not_move
 
 Mright:
+    LDA   PosX_Player0
+    CMP   #140
+    BCS   PrsButton
+
     LDA   SWCHA
     AND   #$80
     BNE   PrsButton
@@ -181,39 +196,57 @@ Mright:
     LDA   #00
     STA   REFP0
     LDA   #$F0
+    INC   PosX_Player0
     STA   HMP0
 
-    LDA   Scan_delay          ; Verificador de atraso
-    CMP   #37
-    BNE   PrsButton
-    INC   Scan_delay
+    LDA  #1
+    AND  Register_user
+    BEQ  PrsButton
+    DEC  Scan_delay
 
 PrsButton:
     LDA   INPT4
     AND   #$80
     BNE   Not_move
-    LDA   Color_PF
+    LDA   COLUPF
     ADC   #$10
     STA   COLUPF              ; Playfield collor
-    STA   Color_PF
 
-    LDA   Scan_delay          ; Verificador de atraso
-    CMP   #37
-    BNE   Not_move
-    INC   Scan_delay
+    LDA  #1
+    AND  Register_user
+    BEQ  Not_move
+    DEC  Scan_delay
 
 Not_move:
     STY   Frames_Pass
 
     LDA   #0
-    STA   VSYNC               ; Signal vertical sync by clearing the bit
+                               ;  Position Respawn IN
+    CMP   Respawn_P0           ;  LDA #0
+    BNE   N_RespawnP0
+    INC   Respawn_P0
+
+    LDY   #$03
+    STA   WSYNC
+
+Sync_delay3:
+    DEY
+    NOP
+    BNE   Sync_delay3
+    STA   RESP0
+                                ;  Position Respawn OUT
+
+  ;  JMP   PreparePlayfield
+
+N_RespawnP0:
+    LDA   #0
+    STA   VSYNC               ;  Signal vertical sync by clearing the bit
 
 ;=============================================================================================
 
 PreparePlayfield:             ; We'll use the first VBLANK scanline for setup
     LDX   #0                  ; X will count visible scanlines, let's reset it
     LDY   #0
-    STY   SpriteP1_Control
     STY   SpriteP0_Control
 
     LDA   #$FF
@@ -225,17 +258,17 @@ PreparePlayfield:             ; We'll use the first VBLANK scanline for setup
     STA   GRP0
     STA   WSYNC
     STA   HMOVE
+    STA   CXCLR
 
 VBlank_Sync_Finished:           ; Vblank sync (37 Scanline)
     STA   WSYNC
-    dec   Scan_delay
+    DEC   Scan_delay
     BNE   VBlank_Sync_Finished
 
     LDA   #0                    ; Vertical blank is done, we can "turn on" the beam
     STA   VBLANK
     INX
     STA   WSYNC
-
 ;=============================================================================================
 ;=============================================================================================
 ;             PRINT SCREEN MOMENT (HOT SCANLINES).
@@ -285,15 +318,18 @@ Logic_game:
     ;  Tape code here (inter top AND botton bord)
     ;
 
-    ;Print_Player0
 
+
+N_Collison:
+
+    ;Print_Player0
     INX                         ; Incrementa contador de scanline. Verifica final da tela util.
     STA   WSYNC
 
     CPX   PosY_UP_Player0
-    BCC   Not_Print_player1
+    BCC   Not_Print_player0
     CPX   PosY_DN_Player0
-    BCS   Not_Print_player1
+    BCS   Not_Print_player0
 
     LDY   SpriteP0_Control
     INC   SpriteP0_Control
@@ -301,7 +337,7 @@ Logic_game:
     STA   GRP0
 ;    STA   RESP0
 
-Not_Print_player1
+Not_Print_player0:
 
     JMP   Scanline
 ;=============================================================================================
@@ -322,12 +358,20 @@ ScanlineEnd:
     STA   WSYNC
 
 Overscan:
+    LDY   #30
     LDA   #%01000010  ; "turn off"
     STA   VBLANK      ;
-    REPEAT 30         ; Last 30 Scanline.
-          STA   WSYNC
-    REPEND
+Sync_delay4:          ; Last 30 Scanline.
+    STA   WSYNC
+    DEY
+    BNE  Sync_delay4
+
     JMP   StartFrame  ; Volta pro main.
+
+;=============================================================================================
+;             Functions
+;=============================================================================================
+
 
 ;=============================================================================================
 ;             DATA DECLARATION
