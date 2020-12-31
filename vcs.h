@@ -136,6 +136,20 @@ CXCLR       ds 1    ; $2C   ---- ----   Clear Collision Latches
 			SEG.U TIA_REGISTERS_READ
 			ORG TIA_BASE_READ_ADDRESS
 
+;				CXM0P (R)  - Collision Latch M0-P1, M0-P0 (Bit 7,6) (Read only)
+;				CXM1P (R)  - Collision Latch M1-P0, M1-P1 (Bit 7,6) (Read only)
+;				CXP0FB (R) - Collision Latch P0-PF, P0-BL (Bit 7,6) (Read only)
+;				CXP1FB (R) - Collision Latch P1-PF, P1-BL (Bit 7,6) (Read only)
+;				CXM0FB (R) - Collision Latch M0-PF, M0-BL (Bit 7,6) (Read only)
+;				CXM1FB (R) - Collision Latch M1-PF, M1-BL (Bit 7,6) (Read only)
+;				CXBLPF (R) - Collision Latch BL-PF (Bit 7) (Read only)
+;				CXPPMM (R) - Collision Latch P0-P1, M0-M1 (Bit 7,6) (Read only)
+
+;				 Bit  Expl.
+;				 0-5  Not used
+;				 6,7  Two Collsion Flags   (0=No collision, 1=Collision occured)
+
+;				CXCLR (W) <strobe> - Clear all collision latches
                     ;											bit 7   bit 6
 CXM0P       ds 1    ; $00       xx00 0000       Read Collision  M0-P1   M0-P0
 CXM1P       ds 1    ; $01       xx00 0000                       M1-P0   M1-P1
