@@ -5,7 +5,8 @@ VERSION_VCS	= 106
 
 ; THIS IS *THE* "STANDARD" VCS.H
 ; THIS FILE IS EXPLICITLY SUPPORTED AS A DASM-PREFERRED COMPANION FILE
-; The latest version can be found at https://dasm-assembler.github.io/
+; The latest version can be found at https://dasm-a
+ssembler.github.io/
 ;
 ; This file defines hardware registers and memory mapping for the
 ; Atari 2600. It is distributed as a companion machine-specific support package
@@ -87,8 +88,8 @@ TIA_BASE_WRITE_ADDRESS = TIA_BASE_ADDRESS
 
 VSYNC       ds 1    ; $00   0000 00x0   Vertical Sync Set-Clear
 VBLANK	    ds 1    ; $01   xx00 00x0   Vertical Blank Set-Clear
-WSYNC	    	ds 1    ; $02   ---- ----   Wait for Horizontal Blank
-RSYNC	   		ds 1    ; $03   ---- ----   Reset Horizontal Sync Counter
+WSYNC	    ds 1    ; $02   ---- ----   Wait for Horizontal Blank
+RSYNC	    ds 1    ; $03   ---- ----   Reset Horizontal Sync Counter
 NUSIZ0	    ds 1    ; $04   00xx 0xxx   Number-Size player/missle 0
 NUSIZ1	    ds 1    ; $05   00xx 0xxx   Number-Size player/missle 1
 COLUP0	    ds 1    ; $06   xxxx xxx0   Color-Luminance Player 0
@@ -136,13 +137,13 @@ CXCLR       ds 1    ; $2C   ---- ----   Clear Collision Latches
 			SEG.U TIA_REGISTERS_READ
 			ORG TIA_BASE_READ_ADDRESS
 
-;				CXM0P (R)  - Collision Latch M0-P1, M0-P0 (Bit 7,6) (Read only)
-;				CXM1P (R)  - Collision Latch M1-P0, M1-P1 (Bit 7,6) (Read only)
+;				CXM0P  (R) - Collision Latch M0-P1, M0-P0 (Bit 7,6) (Read only)
+;				CXM1P  (R) - Collision Latch M1-P0, M1-P1 (Bit 7,6) (Read only)
 ;				CXP0FB (R) - Collision Latch P0-PF, P0-BL (Bit 7,6) (Read only)
 ;				CXP1FB (R) - Collision Latch P1-PF, P1-BL (Bit 7,6) (Read only)
 ;				CXM0FB (R) - Collision Latch M0-PF, M0-BL (Bit 7,6) (Read only)
 ;				CXM1FB (R) - Collision Latch M1-PF, M1-BL (Bit 7,6) (Read only)
-;				CXBLPF (R) - Collision Latch BL-PF (Bit 7) (Read only)
+;				CXBLPF (R) - Collision Latch BL-PF        (Bit 7)   (Read only)
 ;				CXPPMM (R) - Collision Latch P0-P1, M0-M1 (Bit 7,6) (Read only)
 
 ;				 Bit  Expl.
@@ -150,7 +151,7 @@ CXCLR       ds 1    ; $2C   ---- ----   Clear Collision Latches
 ;				 6,7  Two Collsion Flags   (0=No collision, 1=Collision occured)
 
 ;				CXCLR (W) <strobe> - Clear all collision latches
-                    ;											bit 7   bit 6
+
 CXM0P       ds 1    ; $00       xx00 0000       Read Collision  M0-P1   M0-P0
 CXM1P       ds 1    ; $01       xx00 0000                       M1-P0   M1-P1
 CXP0FB      ds 1    ; $02       xx00 0000                       P0-PF   P0-BL
@@ -173,48 +174,45 @@ INPT5       ds 1    ; $0D		x000 0000       Read Input (Trigger) 1
 
 	; RIOT MEMORY MAP
 
-	;				Control Mapping
-	;				Pin  PlayerP0  PlayerP1  Expl.
-	;				  1    SWCHA.4   SWCHA.0   Up     (0=Moved, 1=Not moved)
-	;				  2    SWCHA.5   SWCHA.1   Down   ("")
-	;				  3    SWCHA.6   SWCHA.2   Left   ("")
-	;				  4    SWCHA.7   SWCHA.3   Right  ("")
-	;				  6    INPT4.7   INPT5.7   Button (0=Pressed, 1=Not pressed)
+	;			Control Mapping (SWCHA):
+	;			Pin  PlayerP0  PlayerP1  Expl.
+	;			  1    SWCHA.4   SWCHA.0   Up     (0=Moved, 1=Not moved)
+	;			  2    SWCHA.5   SWCHA.1   Down   ("")
+	;			  3    SWCHA.6   SWCHA.2   Left   ("")
+	;			  4    SWCHA.7   SWCHA.3   Right  ("")
+	;			  6    INPT4.7   INPT5.7   Button (0=Pressed, 1=Not pressed)
+	;			Console	Switch (button):
+	;				Bit        Expl.
+	;				SWCHB.0    Reset Button          (0=Pressed)
+	;				SWCHB.1    Select Button         (0=Pressed)
+	;				SWCHB.2    Not used
+	;				SWCHB.3    Color Switch          (0=B/W, 1=Color) (Always 0 for SECAM)
+	;				SWCHB.4-5  Not used
+	;				SWCHB.6    P0 Difficulty Switch  (0=Beginner (B), 1=Advanced (A))
+	;				SWCHB.7    P1 Difficulty Switch  (0=Beginner (B), 1=Advanced (A))
+	
 
-	;					Console	Switch (button)
-	;					Bit        Expl.
-	;					SWCHB.0    Reset Button          (0=Pressed)
-	;					SWCHB.1    Select Button         (0=Pressed)
-	;					SWCHB.2    Not used
-	;					SWCHB.3    Color Switch          (0=B/W, 1=Color) (Always 0 for SECAM)
-	;					SWCHB.4-5  Not used
-	;					SWCHB.6    P0 Difficulty Switch  (0=Beginner (B), 1=Advanced (A))
-	;					SWCHB.7    P1 Difficulty Switch  (0=Beginner (B), 1=Advanced (A))
-	;					SWBCNT      ds 1    ; $283      Port B DDR
-	;					INTIM       ds 1    ; $284		  Timer output
-
-SWCHA       ds 1    ; $280   Port A data register for joysticks:
-  									; Bits 4-7 for player 1.  Bits 0-3 for player 2.
+SWCHA       ds 1    ; $280      Port A data register for joysticks:  Bits 4-7 for player 1.  Bits 0-3 for player 2.
 SWACNT      ds 1    ; $281      Port A data direction register (DDR)
-SWCHB       ds 1    ; $282		  Port B data (console switches)
-
-TIMINT      ds 1    ; $285  Unused/undefined registers ($285-$294)
-						ds 1		; $286
-						ds 1		; $287
-						ds 1		; $288
-						ds 1		; $289
-						ds 1		; $28A
-						ds 1		; $28B
-						ds 1		; $28C
-						ds 1		; $28D
-						ds 1		; $28E
-						ds 1		; $28F
-						ds 1		; $290
-						ds 1		; $291
-						ds 1		; $292
-						ds 1		; $293
-
-TIM1T       ds 1    ; $294	   	set 1 clock interval
+SWCHB       ds 1    ; $282		Port B data (console switches)
+SWBCNT      ds 1    ; $283      Port B DDR
+INTIM       ds 1    ; $284	    Timer output
+TIMINT      ds 1    ; $285  	Unused/undefined registers ($285-$294)
+	    	ds 1	; $286
+			ds 1	; $287
+			ds 1	; $288
+			ds 1	; $289
+			ds 1	; $28A
+			ds 1	; $28B
+			ds 1	; $28C
+			ds 1	; $28D
+			ds 1	; $28E
+			ds 1	; $28F
+			ds 1	; $290
+			ds 1	; $291
+			ds 1	; $292
+			ds 1	; $293
+TIM1T       ds 1    ; $294 		set 1 clock interval
 TIM8T       ds 1    ; $295      set 8 clock interval
 TIM64T      ds 1    ; $296      set 64 clock interval
 T1024T      ds 1    ; $297      set 1024 clock interval

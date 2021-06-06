@@ -7,6 +7,7 @@
 
     PROCESSOR 6502
     INCLUDE "vcs.h"
+    INCLUDE "macro.h"
 
 ;===================================================================
 ;===================================================================
@@ -19,49 +20,40 @@ HEIGHT_PLAYER   = 4
 PLAYER_POS      = LIMIT_SCREEN - HEIGHT_PLAYER
 TOP_LINES       = TOP_BORD+HEIGHT_BORD+24
 N_CORES         = 6
-SCAN_COR        = 6
+SCAN_COR        = 7
 HEIGHT_LINES    = N_CORES * SCAN_COR
-BALL_Size       = 3  ;(2 x 3)
+BALL_Size       = 3  ;(2L x 3C)
 ;===================================================================
 ;===================================================================
-;           VARIAVEIS RAM ($0080-$00FF)(128B)
-
+;           VARIAVEIS RAM ($0080-$00FF)(128B RAM)
 PosX_Player0      = $0080
-
 Frames_Pass       = $0081
-
 Scan_delay        = $0082
-
 Respawn_P0        = $0083
-
-Cores_Lines       = $0083  ;($0084 -- $0089) (6 Bytes)
-
+Cores_Lines       = $0083  ;($0084 -- $0089) (6 Bytes) (6 linhas de cores)
 Cont_Cor          = $0090
-
 Ball_posX         = $0091
-
 Ball_Height       = $0092
-
 Ball_posY         = $0093
-
 Ball_wthP0        = $0094
+    ; Bit    Description
 
-    ; Bit     Description
+    ; 0      Player with Ball   (1 - True , 0 - False)
+    ; 1      Ball Up            (1 - UP   , 0 - Down)
+    ; 2      Ball Right         (1 - Right, 0 - Left)
 
-    ; 0      Player with Ball   (1 - True  , 0 - False)
-    ; 1      Ball Up            (1 - UP    , 0 - Down)
-    ; 2      Ball Right         (1 - Right , 0 - Left)
 
+RANDOM_INC        = $00A0    ; RANDOM FRAME INCREMENT
 ;===================================================================
 ;===================================================================
 
     ORG   $F000       ; Start of "cart area" (see Atari memory map)
-
+    
 Boot_Game:
-                      ; Setando as cores das linhas
+    ; Setando as cores das linhas
     LDY   #1
     LDA   #$48
-    STA   Cores_Lines,Y
+    STA   Cores_Lines,y
     INY
     LDA   #$38
     STA   Cores_Lines,Y
@@ -77,23 +69,23 @@ Boot_Game:
     INY
     LDA   #$88
     STA   Cores_Lines,Y
-                      ; Setando a posição (Horizontal) inicial do jogador e da ball
+    INY
+    ; Setando a posição (Horizontal) inicial do jogador e da ball
     LDA   #62
     STA   PosX_Player0
     STA   Ball_posX
-                      ; Setando a posição (Vertical) inicial do jogador
-    LDA   #PLAYER_POS
-
-                      ; Setando Contador de frames, cores, bool de respawn (Respawn_P0)
+    ; Setando Contador de frames, cores, bool de respawn (Respawn_P0)
     LDA   #0
     STA   Frames_Pass
     STA   Respawn_P0
     STA   Cont_Cor
+    STA   ENABL
 
     STA   COLUBK
 
     LDA   #$06
     STA   COLUPF
+    STA   VBLANK      ; Ativando o VBLANK primeiro load
 
     STA   COLUP0
     STA   COLUP1
@@ -105,13 +97,20 @@ Boot_Game:
     STA   NUSIZ0
     STA   NUSIZ1
 
-    LDA   #7
+    LDA   #$0F
     STA   Ball_wthP0
+
+    LDA   #PLAYER_POS       ; Set "y" for ball
+    SBC   #8
+    STA   Ball_posY
+    ADC   #BALL_Size
+    STA   Ball_Height
 
 ;=============================================================================================
 
 StartFrame:
-    LDA   #35
+    INC   $00A0
+    LDA   #33
     STA   Scan_delay
     STA   HMCLR
 
@@ -120,6 +119,8 @@ StartFrame:
     REPEAT 3                    ; ...AND lasts 3 scanlines
           STA  WSYNC            ; (WSYNC write => wait for end of scanline)
     REPEND
+    LDA   #0
+    STA   VSYNC                 ;  Signal vertical sync by clearing the bit
 
     ; Count Frames IN
     LDY   Frames_Pass
@@ -148,15 +149,16 @@ StartFrame:
     AND   #$80
     BEQ   PrsButton
 
-    JMP   Not_move
+    ;JMP   Not_move
 
 Long_Jump2:
     JMP   Not_move
+
 Mup:
     LDA   #127                  ; Nível Máximo a direita
     CMP   PosX_Player0
     BCC   Delay
-
+    
     LDA   #$E0
     INC   PosX_Player0
     INC   PosX_Player0
@@ -187,10 +189,10 @@ Mleft:
     JMP   Move
 
 Mright:
-    LDA   #127                  ; Nível Máximo a direita
+    LDA   #127                 ; Nível Máximo a direita
     CMP   PosX_Player0
     BCC   Not_move
-
+    DEC   Scan_delay
     LDA   #$E0
     INC   PosX_Player0
     INC   PosX_Player0
@@ -200,23 +202,34 @@ Mright:
 PrsButton:
     LDA   Ball_wthP0
     AND   #$01
-    BEQ   Delay
+    BEQ   Not_move
+
     DEC   Ball_wthP0
+    LDA   $00A0
+    AND   #$0F
+    STA   WSYNC
+    DEC   Scan_delay
+Reset_Ball:
+    NOP 
+    SBC   #1
+    BNE   Reset_Ball
     STA   RESBL
+
     LDA   PosX_Player0
     STA   Ball_posX
 
     LDA   #PLAYER_POS
-    SBC   #4
+    SBC   #8
     STA   Ball_posY
     ADC   #BALL_Size
     STA   Ball_Height
-
-    JMP   Delay
+    
+    JMP   Not_move
 
 Move:
     STA   WSYNC
     STA   HMOVE
+    JMP   Not_move
 Delay:
     INC   Scan_delay
 
@@ -224,37 +237,27 @@ Not_move:
     STY   Frames_Pass
 
     LDA   #0
-                               ;  Position Respawn (boot only)
-    CMP   Respawn_P0           ;  LDA #0
-    BNE   N_RespawnP0
+    ;  Position Respawn (boot only)
+    CMP   Respawn_P0           ; LDA #0
+    BNE   PreparePlayfield     ; Only one time on
     INC   Respawn_P0
 
-    LDY   #$06
     STA   WSYNC
+    SLEEP 41
+    STA   RESP0       ;  Position Respawn OUT
 
-Sync_delay3:
-    DEY
-    NOP
-    BNE   Sync_delay3
-    STA   RESP0              ;  Position Respawn OUT
-
+    ; Positon the missile 1 to rigth side screen
     LDA   #$40
     STA   HMM1
-
     STA   WSYNC
     STA   HMOVE
-    STA   WSYNC
     STA   HMOVE
-
-
-N_RespawnP0:
-    LDA   #0
-    STA   VSYNC               ;  Signal vertical sync by clearing the bit
+    ;STA   WSYNC
 
 ;=============================================================================================
 
 PreparePlayfield:             ; We'll use the first VBLANK scanline for setup
-    ;LDA   #0
+    LDA   #0
     STA   PF0
     STA   PF1
     STA   PF2
@@ -284,38 +287,39 @@ B_horinz:
     AND   #$04       ; HORINZ Move
     BEQ   B_Left
     INC   Ball_posX
-    LDA   #$F0
+    LDA   #$F0       ; Speed Move ball for rigth
     JMP   B_Move
 
-B_Left
+B_Left:
     DEC   Ball_posX
-    LDA   #$10
-B_Move:
-    STA   HMBL
-    ;   Movimentando a Ball
-    DEC   Scan_delay
+    LDA   #$10       ; Speed Move ball for left
 
+B_Move:
+    STA   HMBL       ;   Movimentando a Ball
+    DEC   Scan_delay
+    
     STA   WSYNC
     STA   HMOVE
 
-VBlank_Sync_Finished:           ; Vblank sync (37 Scanline)
+VBlank_Sync_Finished:     ; Vblank sync (37 Scanline)
     STA   WSYNC
     DEC   Scan_delay
     BNE   VBlank_Sync_Finished
 
-    LDA   #0                    ; Vertical blank is done, we can "turn on" the beam
-    STA   VBLANK
-    LDX   #0                  ; X will count visible scanlines, let's reset it
+    LDA   #0                  
+    LDX   #0              ; X will count visible scanlines, let's reset it
     LDY   #0
+    STA   VBLANK          ; Vertical blank is done, we can "turn on" the beam
 ;=============================================================================================
+;                                KERNEL
 ;=============================================================================================
 ;             PRINT SCREEN MOMENT (HOT SCANLINES).
 Scanline:
-    CPX   #TOP_BORD
-    BCC   Score_Write
-    BEQ   Start_Bord
-    CPX   #(TOP_BORD+HEIGHT_BORD+1)
-    BEQ   Stop_Bord
+    CPX   #(TOP_BORD)
+    BCC   Score_Write  ;<
+    BEQ   Start_Bord   ;==
+    CPX   #(TOP_BORD+HEIGHT_BORD+2)
+    BEQ   Stop_Bord    ;==
     JMP   Logic_game
 
 Start_Bord:
@@ -377,9 +381,6 @@ N_BALL:
     JSR   Print_Lines
     JMP   Logic_game
 
-Long_Jump:
-    JMP   Scanline
-
 Stop_Lines:
     INX
     STA   WSYNC
@@ -393,7 +394,7 @@ Stop_Lines:
 Print_Player0
     CPX   #PLAYER_POS
     BEQ   Write_Player
-    CPX   #(PLAYER_POS+HEIGHT_PLAYER)
+    CPX   #(PLAYER_POS+HEIGHT_PLAYER-1)
     BEQ   Not_Write_Player
 
     JMP   Next
@@ -430,24 +431,27 @@ Next:
 ScanlineEnd:
     INX                 ; Incrementa contador de scanline. Verifica final da tela util.
     STA   WSYNC
-    CPX   #(LIMIT_SCREEN+1) ; Ultima Scanline relativa absoluta (util).
-    BCC   Long_Jump
-
+    CPX   #(LIMIT_SCREEN+1) ; Ultima Scanline relativa (util).
+    BCS   Overscan
+    JMP   Scanline
+Overscan:
+    LDY   #37         ; OVERSCAN LINES
     LDA   #0
+    STA   ENABL
     STA   PF0
     STA   PF1
     STA   PF2
-    STA   ENABL
     STA   WSYNC
-
-Overscan:
-    LDY   #29
     LDA   #%01000010  ; "turn off"
     STA   VBLANK      ;
 
-    ; Tratamento de Colisão da BALL (quicar)
+      ; Tratamento de Colisão da BALL (quicar)
       ; Colisão com as paredes (Missiles)
-    CLC
+
+    LDA   CXBLPF      ; BALL cw PF
+    AND   #$80
+    BNE   CPFB
+
     LDA   CXM0FB      ; BALL cw M0
     AND   #$40
     BNE   CM0B
@@ -459,10 +463,6 @@ Overscan:
     LDA   CXP0FB      ; BALL cw P0
     AND   #$40
     BNE   CP0B
-
-    LDA   CXBLPF      ; BALL cw PF
-    AND   #$80
-    BNE   CPFB
 
     JMP   N_Colision
 CM0B:
@@ -477,24 +477,32 @@ CM1B:
     JMP   N_Colision
 CP0B:
     LDA   Ball_wthP0
-    CLC
-    ADC   #$01
+    ORA   #$02
     STA   Ball_wthP0
     JMP   N_Colision
 CPFB:
     LDA   Ball_wthP0
+    AND   #2
+    BEQ   EQ
+
+    LDA   Ball_wthP0
     CLC
-    SBC   #$01
+    SBC   #1
+    JMP   NQ
+EQ:
+    LDA   Ball_wthP0
+    ADC   #1
+NQ:
     STA   Ball_wthP0
     ;JMP   N_Colision
+
 N_Colision:
     STA   CXCLR
-
-                      ; Dead BAll
+    ; Dead BAll
     LDA   Ball_posY
-    CMP   #(LIMIT_SCREEN-1)
+    CMP   #(LIMIT_SCREEN)
     BEQ   Dead_Ball
-    JMP   Sync_delay4
+    JMP   Sync_delay
 
 Dead_Ball:
     LDA   #0
@@ -502,11 +510,10 @@ Dead_Ball:
     LDA   #$07
     STA   Ball_wthP0
 
-Sync_delay4:          ; Last 30 Scanline.
+Sync_delay:           ; Last 30 Scanline.
     STA   WSYNC
     DEY
-    BNE  Sync_delay4
-
+    BNE  Sync_delay
     JMP   StartFrame  ; Volta pro main.
 
 ;=============================================================================================
@@ -521,12 +528,12 @@ Print_Lines:
     STA  Cont_Cor
     INY
 N_Inc:
-    INX                 ; Incrementa contador de scanline. Verifica final da tela util.
+    INX            ; Incrementa contador de scanline. Verifica final da tela util.
     STA   WSYNC
-    LDA   #$FF
-    STA   PF0
-    STA   PF1
-    STA   PF2
+    LDA   #$FF     ;   LINHAS COLORIDAS !  
+    STA   PF0      ;  
+    STA   PF1      ;
+    STA   PF2      ;
     LDA   Cores_Lines,y
     STA   COLUPF
     INC   Cont_Cor
@@ -539,10 +546,8 @@ N_Inc:
 Player_Sprite:
     .BYTE %11111111;
 
-    ORG $FFFA
+    ORG $FFFC
 
-    .WORD Boot_Game      ;     NMI
-    .WORD Boot_Game      ;     RESET (BOOTLOADER)
-    .WORD Boot_Game      ;     IRQ   (RESET)
+    .WORD Boot_Game      ;    BOOT
 
 END
