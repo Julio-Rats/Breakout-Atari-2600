@@ -11,6 +11,41 @@
 
 ;===================================================================
 ;===================================================================
+;                   Constante
+N_CORES         = 6 ;
+;===================================================================
+;===================================================================
+;           VARIAVEIS RAM ($0080-$00FF)(128B RAM)
+
+    SEG.U VARIABLES
+    ORG   $80
+
+PosX_Player0    ds 1 ;$80
+Frames_Pass     ds 1 ;$81
+Scan_delay      ds 1 ;$82
+Respawn_P0      ds 1 ;$83
+Cores_Lines     ds 6 ;($0084 -- $0089) (6 Bytes) (6 linhas de cores)
+Cont_Cor        ds 1 ;$8A
+Ball_posX       ds 1 ;$8B
+Ball_Height     ds 1 ;$8C
+Ball_posY       ds 1 ;$8D
+Ball_wthP0      ds 1 ;$8E
+    ; Bit    Description   Ball_wthP0
+
+    ; 0      Player with Ball   (1 - True , 0 - False)
+    ; 1      Ball Up            (1 - UP   , 0 - Down)
+    ; 2      Ball Right         (1 - Right, 0 - Left)
+
+RANDOM_INC      ds 1 ;$8F ; RANDOM FRAME INCREMENT
+LINE_L1         ds 6 ;$90-$95
+LINE_L2         ds 6 ;$96-$9B
+LINE_L3         ds 6 ;$9C-$A1
+LINE_L4         ds 6 ;$A2-$A7
+LINE_L5         ds 6 ;$A8-$AD
+LINE_L6         ds 6 ;$AE-$B3
+
+;===================================================================
+;===================================================================
 ;           VARIAVEIS GLOBAIS
 
 TOP_BORD        = 8
@@ -19,39 +54,41 @@ LIMIT_SCREEN    = 192
 HEIGHT_PLAYER   = 4
 PLAYER_POS      = LIMIT_SCREEN - HEIGHT_PLAYER
 TOP_LINES       = TOP_BORD+HEIGHT_BORD+24
-N_CORES         = 6
 SCAN_COR        = 7
 HEIGHT_LINES    = N_CORES * SCAN_COR
 BALL_Size       = 3  ;(2L x 3C)
+
 ;===================================================================
 ;===================================================================
-;           VARIAVEIS RAM ($0080-$00FF)(128B RAM)
-PosX_Player0      = $0080
-Frames_Pass       = $0081
-Scan_delay        = $0082
-Respawn_P0        = $0083
-Cores_Lines       = $0083  ;($0084 -- $0089) (6 Bytes) (6 linhas de cores)
-Cont_Cor          = $0090
-Ball_posX         = $0091
-Ball_Height       = $0092
-Ball_posY         = $0093
-Ball_wthP0        = $0094
-    ; Bit    Description
+;           CODE
 
-    ; 0      Player with Ball   (1 - True , 0 - False)
-    ; 1      Ball Up            (1 - UP   , 0 - Down)
-    ; 2      Ball Right         (1 - Right, 0 - Left)
-
-
-RANDOM_INC        = $00A0    ; RANDOM FRAME INCREMENT
-;===================================================================
-;===================================================================
-
+    SEG   CODE
     ORG   $F000       ; Start of "cart area" (see Atari memory map)
-    
+
 Boot_Game:
+    CLD
+    CLI
+    LDA #0
+    LDY #0
+    LDX #$FF
+    TXS
+    INX
+
+Clear_Memory
+    STA $80,X
+    STA $90,X
+    STA $A0,X
+    STA $B0,X
+    STA $C0,X
+    STA $D0,X
+    STA $E0,X
+    STA $F0,X
+    INX
+    CPX #$10
+    BNE Clear_Memory
+
     ; Setando as cores das linhas
-    LDY   #1
+    LDY   #0
     LDA   #$48
     STA   Cores_Lines,y
     INY
@@ -69,7 +106,15 @@ Boot_Game:
     INY
     LDA   #$88
     STA   Cores_Lines,Y
-    INY
+
+    LDA  #$FF
+    LDY  #36
+
+Set_Grid:
+    DEY
+    STA LINE_L1,Y
+    BNE Set_Grid
+
     ; Setando a posição (Horizontal) inicial do jogador e da ball
     LDA   #62
     STA   PosX_Player0
@@ -109,13 +154,14 @@ Boot_Game:
 ;=============================================================================================
 
 StartFrame:
-    INC   $00A0
+    INC   RANDOM_INC
     LDA   #33
     STA   Scan_delay
     STA   HMCLR
 
     LDA   #$02                  ; Vertical sync is signaled by VSYNC's bit 1...
     STA   VSYNC
+
     REPEAT 3                    ; ...AND lasts 3 scanlines
           STA  WSYNC            ; (WSYNC write => wait for end of scanline)
     REPEND
@@ -158,7 +204,7 @@ Mup:
     LDA   #127                  ; Nível Máximo a direita
     CMP   PosX_Player0
     BCC   Delay
-    
+
     LDA   #$E0
     INC   PosX_Player0
     INC   PosX_Player0
@@ -205,12 +251,13 @@ PrsButton:
     BEQ   Not_move
 
     DEC   Ball_wthP0
-    LDA   $00A0
+    LDA   RANDOM_INC
     AND   #$0F
     STA   WSYNC
     DEC   Scan_delay
+
 Reset_Ball:
-    NOP 
+    NOP
     SBC   #1
     BNE   Reset_Ball
     STA   RESBL
@@ -223,13 +270,15 @@ Reset_Ball:
     STA   Ball_posY
     ADC   #BALL_Size
     STA   Ball_Height
-    
+
+    DEC   Scan_delay
     JMP   Not_move
 
 Move:
     STA   WSYNC
     STA   HMOVE
     JMP   Not_move
+
 Delay:
     INC   Scan_delay
 
@@ -258,6 +307,7 @@ Not_move:
 
 PreparePlayfield:             ; We'll use the first VBLANK scanline for setup
     LDA   #0
+    STA   Cont_Cor
     STA   PF0
     STA   PF1
     STA   PF2
@@ -297,7 +347,7 @@ B_Left:
 B_Move:
     STA   HMBL       ;   Movimentando a Ball
     DEC   Scan_delay
-    
+
     STA   WSYNC
     STA   HMOVE
 
@@ -306,14 +356,16 @@ VBlank_Sync_Finished:     ; Vblank sync (37 Scanline)
     DEC   Scan_delay
     BNE   VBlank_Sync_Finished
 
-    LDA   #0                  
+    LDA   #0
     LDX   #0              ; X will count visible scanlines, let's reset it
     LDY   #0
     STA   VBLANK          ; Vertical blank is done, we can "turn on" the beam
+
 ;=============================================================================================
-;                                KERNEL
+;                                	KERNEL
 ;=============================================================================================
 ;             PRINT SCREEN MOMENT (HOT SCANLINES).
+
 Scanline:
     CPX   #(TOP_BORD)
     BCC   Score_Write  ;<
@@ -349,10 +401,9 @@ Stop_Bord:
     STA   PF2
     LDA   #$48
     STA   COLUPF
-    LDY   #0
-;    JMP   Logic_game
 
 ;=============================================================================================
+
 Logic_game:
     CPX   Ball_posY
     BEQ   Write_Ball
@@ -410,7 +461,7 @@ Write_Player:
     LDA   #$46
     STA   COLUP0
 
-    LDA   Player_Sprite
+    LDA   #$FF;Player_Sprite
     STA   GRP0
 
     JMP   Print_Player0
@@ -422,7 +473,8 @@ Not_Write_Player:
     STA   COLUP0
     LDA   #0
     STA   GRP0
-Next:
+
+Next: ;Tratar colisão contra linhas aq.
 
 ;=============================================================================================
 ;=============================================================================================
@@ -434,6 +486,7 @@ ScanlineEnd:
     CPX   #(LIMIT_SCREEN+1) ; Ultima Scanline relativa (util).
     BCS   Overscan
     JMP   Scanline
+
 Overscan:
     LDY   #37         ; OVERSCAN LINES
     LDA   #0
@@ -465,21 +518,25 @@ Overscan:
     BNE   CP0B
 
     JMP   N_Colision
+
 CM0B:
     LDA   Ball_wthP0
     ORA   #$04
     STA   Ball_wthP0
     JMP   N_Colision
+
 CM1B:
     LDA   Ball_wthP0
     AND   #$FB
     STA   Ball_wthP0
     JMP   N_Colision
+
 CP0B:
     LDA   Ball_wthP0
     ORA   #$02
     STA   Ball_wthP0
     JMP   N_Colision
+
 CPFB:
     LDA   Ball_wthP0
     AND   #2
@@ -489,9 +546,11 @@ CPFB:
     CLC
     SBC   #1
     JMP   NQ
+
 EQ:
     LDA   Ball_wthP0
     ADC   #1
+
 NQ:
     STA   Ball_wthP0
     ;JMP   N_Colision
@@ -513,41 +572,41 @@ Dead_Ball:
 Sync_delay:           ; Last 30 Scanline.
     STA   WSYNC
     DEY
-    BNE  Sync_delay
+    BNE   Sync_delay
     JMP   StartFrame  ; Volta pro main.
 
 ;=============================================================================================
-;             Functions
+;             				Functions
 ;=============================================================================================
 
 Print_Lines:
     LDA   Cont_Cor
     CMP   #SCAN_COR
     BNE   N_Inc
-    LDA   #0
-    STA  Cont_Cor
+    LDA   #$00
+    STA   Cont_Cor
     INY
+
 N_Inc:
     INX            ; Incrementa contador de scanline. Verifica final da tela util.
-    STA   WSYNC
-    LDA   #$FF     ;   LINHAS COLORIDAS !  
-    STA   PF0      ;  
-    STA   PF1      ;
-    STA   PF2      ;
     LDA   Cores_Lines,y
     STA   COLUPF
+    STA   WSYNC
+    LDA   #$FF     ; LINHAS COLORIDAS !
+    STA   PF0
+    STA   PF1
+    STA   PF2
     INC   Cont_Cor
 
     RTS
+
 ;=============================================================================================
-;             DATA DECLARATION
+;             				DATA DECLARATION
 ;=============================================================================================
 
-Player_Sprite:
-    .BYTE %11111111;
+    ORG $FFFA
 
-    ORG $FFFC
-
+    .WORD StartFrame     ;
     .WORD Boot_Game      ;    BOOT
-
+    .WORD StartFrame     ;    IRS
 END
