@@ -1,8 +1,8 @@
-; Para compilar usar o DASM (Multiplataforma e livre !!)
-; (http://dasm-dillon.sourceforge.net/), para baixar:
-; Roda na linha de comando:
+; Utilizado o DASM para compilar
+; veja em https://github.com/Julio-Rats/dasm
 ;
-;     dasm breakout.asm -obreakout.bin -f3
+; Comando para compilar:
+;   dasm breakout.asm -obreakout.bin -f3
 ;
 
     PROCESSOR 6502
@@ -11,8 +11,17 @@
 
 ;===================================================================
 ;===================================================================
-;                   Constante
-N_CORES         = 6 ;
+;                   Constantes
+N_CORES         = 6 
+TOP_BORD        = 8
+HEIGHT_BORD     = 19
+LIMIT_SCREEN    = 192
+HEIGHT_PLAYER   = 4
+PLAYER_POS      = LIMIT_SCREEN - HEIGHT_PLAYER
+TOP_LINES       = TOP_BORD+HEIGHT_BORD+24
+SCAN_COR        = 7
+HEIGHT_LINES    = N_CORES * SCAN_COR
+BALL_Size       = 3  ;(2L x 3C)
 ;===================================================================
 ;===================================================================
 ;           VARIAVEIS RAM ($0080-$00FF)(128B RAM)
@@ -29,6 +38,7 @@ Cont_Cor        ds 1 ;$8A
 Ball_posX       ds 1 ;$8B
 Ball_Height     ds 1 ;$8C
 Ball_posY       ds 1 ;$8D
+;
 Ball_wthP0      ds 1 ;$8E
     ; Bit    Description   Ball_wthP0
 
@@ -46,20 +56,6 @@ LINE_L6         ds 6 ;$AE-$B3
 
 ;===================================================================
 ;===================================================================
-;           VARIAVEIS GLOBAIS
-
-TOP_BORD        = 8
-HEIGHT_BORD     = 19
-LIMIT_SCREEN    = 192
-HEIGHT_PLAYER   = 4
-PLAYER_POS      = LIMIT_SCREEN - HEIGHT_PLAYER
-TOP_LINES       = TOP_BORD+HEIGHT_BORD+24
-SCAN_COR        = 7
-HEIGHT_LINES    = N_CORES * SCAN_COR
-BALL_Size       = 3  ;(2L x 3C)
-
-;===================================================================
-;===================================================================
 ;           CODE
 
     SEG   CODE
@@ -68,27 +64,25 @@ BALL_Size       = 3  ;(2L x 3C)
 Boot_Game:
     CLD
     CLI
-    LDA #0
-    LDY #0
+    LDA #$00
+    LDY #$10
     LDX #$FF
     TXS
     INX
 
 Clear_Memory
-    STA $80,X
-    STA $90,X
-    STA $A0,X
-    STA $B0,X
-    STA $C0,X
-    STA $D0,X
-    STA $E0,X
-    STA $F0,X
-    INX
-    CPX #$10
+    DEY
+    STA $80,Y
+    STA $90,Y
+    STA $A0,Y
+    STA $B0,Y
+    STA $C0,Y
+    STA $D0,Y
+    STA $E0,Y
+    STA $F0,Y
     BNE Clear_Memory
 
     ; Setando as cores das linhas
-    LDY   #0
     LDA   #$48
     STA   Cores_Lines,y
     INY
