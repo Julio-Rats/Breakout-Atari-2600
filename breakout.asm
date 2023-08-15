@@ -12,14 +12,53 @@
 ;===================================================================
 ;===================================================================
 ;                   Constantes
-NUMBER_LINES        = 6 
+
+;===================================================================
+;                       NTSC
+KERNEL_SCANLINE     = 190
 SCAN_START_BORDER   = 14
-LAST_SCANLINE       = 189
+HEIGHT_LINES        = 6
+
+VBLANK_TIMER        = 43
+OVERSCAN_TIMER      = 38
+
+BG_COLOR            = $04
+PLAYER_COLOR        = $46
+
+LINE_COLOR1         = $46
+LINE_COLOR2         = $36
+LINE_COLOR3         = $26
+LINE_COLOR4         = $16
+LINE_COLOR5         = $C6
+LINE_COLOR6         = $86
+;===================================================================
+;                       PAL
+; KERNEL_SCANLINE     = 226
+; SCAN_START_BORDER   = 22
+; HEIGHT_LINES        = 8
+
+; VBLANK_TIMER        = 52
+; OVERSCAN_TIMER      = 45
+
+; BG_COLOR            = $08
+; PLAYER_COLOR        = $46
+
+; LINE_COLOR1         = $62
+; LINE_COLOR2         = $64
+; LINE_COLOR3         = $46
+; LINE_COLOR4         = $26
+; LINE_COLOR5         = $56
+; LINE_COLOR6         = $D6
+;===================================================================
+NUMBER_LINES        = 6 
 HEIGHT_BORDER       = 16
 HEIGHT_PLAYER       = 4
-HEIGHT_LINES        = 12
-BALL_SIZE           = 3 
-SCAN_POS_PLAYER     = (LAST_SCANLINE - HEIGHT_PLAYER)
+BALL_SIZE           = 3
+SPEED_LEFT          = 3
+SPEED_LEFT_HEX      = $30
+SPEED_RIGHT         = 3
+SPEED_RIGHT_HEX     = $D0
+SCAN_POS_PLAYER     = (KERNEL_SCANLINE - HEIGHT_PLAYER)
 SCAN_START_LINES    = (SCAN_START_BORDER + HEIGHT_BORDER + 21)
 
 
@@ -36,19 +75,27 @@ LINES_PFS0      ds  NUMBER_LINES
 LINES_PFS1      ds  NUMBER_LINES
 LINES_PFS2      ds  NUMBER_LINES
 LINES_PFS3      ds  NUMBER_LINES
-
+BALL_POS        ds  1
+BALL_STATUS     ds  1
+;   BALL_STATUS DECODER
+;      BIT         ACTION
+;       0           LIVE?
+;       1           MOVE_RIGHT?
+;       2           MOVE_UP?
+;      4-7          SPEED BALL
 ;===================================================================
 ;===================================================================
 ;                       CODE SEGMENT
 
     SEG   CODE
     ORG   $F000     ; Start of "Cart Area" (See Atari Memory Map)
-
-; CPU ENTERPOINT
+;===================================================================
+;                       CPU ENTERPOINT
+;===================================================================
 BootGame:
     SEI
     CLD
-    LDA #00
+    LDA #0
     TAY
     LDX #$FF
     TXS
@@ -61,10 +108,10 @@ ClearMemory:
 
     ; Set Color
     STA COLUBK
-    LDA #$04
+    LDA #BG_COLOR
     STA COLUP0
     STA COLUPF
-    LDA #$18
+    LDA #PLAYER_COLOR
     STA COLUP1
 
     ; Set Position of P0,P1,M0
@@ -94,10 +141,15 @@ PosPlayer1:
     BPL PosPlayer1
     STA RESP1
 
+    LDA #68
+    STA BALL_POS
+    LDA #$16
+    STA BALL_STATUS
     LDA #$F0
     STA HMP0
     LDA #$20
     STA HMP1
+    STA WSYNC
     STA WSYNC
     STA HMOVE
     STA WSYNC
@@ -110,17 +162,17 @@ PosPlayer1:
     STA NUSIZ1
 
     ; Load Colors of lines
-    LDA #$46
+    LDA #LINE_COLOR1
     STA LINE_COLORS+5
-    LDA #$36
+    LDA #LINE_COLOR2
     STA LINE_COLORS+4
-    LDA #$26
+    LDA #LINE_COLOR3
     STA LINE_COLORS+3
-    LDA #$16
+    LDA #LINE_COLOR4
     STA LINE_COLORS+2
-    LDA #$c6
+    LDA #LINE_COLOR5
     STA LINE_COLORS+1
-    LDA #$86
+    LDA #LINE_COLOR6
     STA LINE_COLORS
     
     ; Set Lines
@@ -143,28 +195,82 @@ OuthersPFS:
     LDA #%01000010  ; Starting Vblank
     STA VBLANK  
 
-;=============================================================================================
-; NEW FRAME CYCLE
+;===================================================================
+;                     NEW FRAME CYCLE
+;===================================================================
 StartFrame:
-    LDA #$02        ; Vertical sync is signaled by VSYNC's bit 1...
+    LDA #$02            ; Vertical sync is signaled by VSYNC's bit 1...
     STA VSYNC
     LDX #03
 
-WsynWait:           ; ...waiting 3 scanlines
-    STA WSYNC       ; (WSYNC write => wait for end of scanline)
+WsynWait:               ; ...waiting 3 scanlines
+    STA WSYNC           ; (WSYNC write => wait for end of scanline)
     DEX
     BNE WsynWait
 
-    STX VSYNC       ; Signal vertical sync by clearing the bit
+    STX VSYNC           ; Signal vertical sync by clearing the bit
 
-    LDA #47         ; Timing Vblank (37 Scanlines)
+    LDA #VBLANK_TIMER   ; Timing Vblank (37 Scanlines)
     STA TIM64T
     
-;=============================================================================================
-; interframe code here
+;===================================================================
+;                     Vblank code area
+;===================================================================
+    LDA #$80
+    AND INPT4
+    BEQ FIRE
+    AND INPT5
+    BEQ FIRE
+    JMP Controllers
 
-    LDA #$21
-    STA CTRLPF ; Control Mode Playfield to Board
+FIRE:
+    LDA BALL_STATUS
+    AND #1
+    BNE Controllers
+    INC BALL_STATUS
+    LDA #$17
+    AND BALL_STATUS
+    STA BALL_STATUS
+
+Controllers:
+    LDX SWCHA
+    ; Left
+    TXA
+    AND #$40
+    BEQ Move_left
+    TXA
+    AND #$04
+    BEQ Move_left
+    TXA
+    AND #$80
+    BEQ Move_right
+    TXA
+    AND #$08
+    BEQ Move_right
+    JMP No_move
+
+Move_left:
+    LDX BALL_POS
+    CPX #25
+    BMI No_move
+    LDA #SPEED_LEFT_HEX
+    STA HMP1
+    LDA BALL_POS
+    SEC
+    SBC #SPEED_LEFT
+    STA BALL_POS
+    JMP No_move
+Move_right: 
+    LDX BALL_POS
+    CPX #112
+    BPL No_move
+    LDA #SPEED_RIGHT_HEX
+    STA HMP1
+    LDA BALL_POS
+    CLC
+    ADC #SPEED_RIGHT
+    STA BALL_POS
+No_move:
 
 ; PreparePlayfield:   ; We'll use the first VBLANK scanline for setup
     LDA #0
@@ -177,16 +283,20 @@ WsynWait:           ; ...waiting 3 scanlines
     STA ENAM1
     STA ENABL
     STA WSYNC
-    STA HMCLR
     STA COUNT_SCANLINES
-    LDA #$04
+    LDA #BG_COLOR
     STA COLUPF
+    LDA #$21
+    STA CTRLPF          ; Control Mode Playfield to Board
 
 WaitVblankEnd:
     LDA INTIM
     BNE WaitVblankEnd
 
     STA WSYNC
+    STA HMOVE
+    STA WSYNC
+    STA HMCLR
     STA VBLANK          ; Stop Vblank
 
 ;=============================================================================================
@@ -279,7 +389,7 @@ WaitStartPlayer:
     STA GRP1
 
     LDX #HEIGHT_PLAYER
-PrintPlay
+PrintPlay:
     INC COUNT_SCANLINES
     STA WSYNC
     DEX
@@ -290,18 +400,18 @@ PrintPlay
 ;=============================================================================================
 ;=============================================================================================
     LDY COUNT_SCANLINES
-    CPY #LAST_SCANLINE
+    CPY #KERNEL_SCANLINE
     BNE Overscan
 ScanlineEnd:
     JSR NewLine
-    CPY #LAST_SCANLINE
+    CPY #KERNEL_SCANLINE
     BCC ScanlineEnd
 
 Overscan:
     LDA #0
     STA GRP0
     STA ENAM0 
-    LDA #37                 ; Timing OverScanlines
+    LDA #OVERSCAN_TIMER     ; Timing OverScanlines
     STA TIM64T
 
     STA WSYNC
