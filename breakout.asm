@@ -15,12 +15,12 @@
 
 ;===================================================================
 ;                       NTSC
-KERNEL_SCANLINE     = 190
+KERNEL_SCANLINE     = 192
 SCAN_START_BORDER   = 14
 HEIGHT_LINES        = 6
 
 VBLANK_TIMER        = 43
-OVERSCAN_TIMER      = 38
+OVERSCAN_TIMER      = 41
 
 BG_COLOR            = $04
 PLAYER_COLOR        = $46
@@ -33,7 +33,7 @@ LINE_COLOR5         = $C6
 LINE_COLOR6         = $86
 ;===================================================================
 ;                       PAL
-; KERNEL_SCANLINE     = 226
+; KERNEL_SCANLINE     = 228
 ; SCAN_START_BORDER   = 22
 ; HEIGHT_LINES        = 8
 
@@ -58,9 +58,9 @@ SPEED_LEFT          = 3
 SPEED_LEFT_HEX      = $30
 SPEED_RIGHT         = 3
 SPEED_RIGHT_HEX     = $D0
-SCAN_POS_PLAYER     = (KERNEL_SCANLINE - HEIGHT_PLAYER)
+LAST_SCANLINE       = KERNEL_SCANLINE-3
+SCAN_POS_PLAYER     = (LAST_SCANLINE - HEIGHT_PLAYER)
 SCAN_START_LINES    = (SCAN_START_BORDER + HEIGHT_BORDER + 21)
-
 
 ;===================================================================
 ;===================================================================
@@ -105,7 +105,6 @@ ClearMemory:
     DEX
     STA $CC,X
     BNE ClearMemory
-
     ; Set Color
     STA COLUBK
     LDA #BG_COLOR
@@ -113,7 +112,6 @@ ClearMemory:
     STA COLUPF
     LDA #PLAYER_COLOR
     STA COLUP1
-
     ; Set Position of P0,P1,M0
     LDY #$04
     STA WSYNC
@@ -131,7 +129,6 @@ PosMissile0:
     NOP
     NOP
     STA RESM0
-
     ; Set Position of P0 and M0
     LDY #$08
     STA WSYNC
@@ -145,6 +142,7 @@ PosPlayer1:
     STA BALL_POS
     LDA #$16
     STA BALL_STATUS
+
     LDA #$F0
     STA HMP0
     LDA #$20
@@ -201,16 +199,16 @@ OuthersPFS:
 StartFrame:
     LDA #$02            ; Vertical sync is signaled by VSYNC's bit 1...
     STA VSYNC
-    LDX #03
 
+    LDX #03
 WsynWait:               ; ...waiting 3 scanlines
     STA WSYNC           ; (WSYNC write => wait for end of scanline)
     DEX
     BNE WsynWait
 
-    STX VSYNC           ; Signal vertical sync by clearing the bit
+    STX VSYNC           ; Signal vertical sync by clearing the bit (Start Vblank)
 
-    LDA #VBLANK_TIMER   ; Timing Vblank (37 Scanlines)
+    LDA #VBLANK_TIMER   ; Timing Vblank Scanlines
     STA TIM64T
     
 ;===================================================================
@@ -272,7 +270,7 @@ Move_right:
     STA BALL_POS
 No_move:
 
-; PreparePlayfield:   ; We'll use the first VBLANK scanline for setup
+; PreparePlayfield:     ; Preparing graph registers to start hot scanlines
     LDA #0
     STA PF0
     STA PF1
@@ -287,7 +285,7 @@ No_move:
     LDA #BG_COLOR
     STA COLUPF
     LDA #$21
-    STA CTRLPF          ; Control Mode Playfield to Board
+    STA CTRLPF          ; Control Mode Playfield to Board (PlayField Reflect)
 
 WaitVblankEnd:
     LDA INTIM
@@ -394,31 +392,27 @@ PrintPlay:
     STA WSYNC
     DEX
     BNE PrintPlay
+    STX GRP0
     STX GRP1
+    STX ENAM0 
 
 ;=============================================================================================
+;                                  OVERSCAN
 ;=============================================================================================
-;=============================================================================================
-    LDY COUNT_SCANLINES
-    CPY #KERNEL_SCANLINE
-    BNE Overscan
 ScanlineEnd:
     JSR NewLine
-    CPY #KERNEL_SCANLINE
-    BCC ScanlineEnd
+    CPY #(KERNEL_SCANLINE-1)
+    BNE ScanlineEnd
 
 Overscan:
-    LDA #0
-    STA GRP0
-    STA ENAM0 
     LDA #OVERSCAN_TIMER     ; Timing OverScanlines
     STA TIM64T
 
     STA WSYNC
-    LDA #%01000010          ; "Turn Off Cathodic Ray and "
+    LDA #%01000010          ; "Turn Off Cathodic Ray"
     STA VBLANK      
 
-WaintOverscanEnd:           ; Timing 27 Scanline.
+WaintOverscanEnd:           ; Timing OverScanlines
     LDA INTIM
     BNE WaintOverscanEnd
     JMP StartFrame          ; Back to Start  
