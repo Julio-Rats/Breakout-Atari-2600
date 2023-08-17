@@ -23,7 +23,7 @@ VBLANK_TIMER        = 43
 OVERSCAN_TIMER      = 41
 
 BG_COLOR            = $04
-PLAYER_COLOR        = $46
+PLAYER_COLOR        = $F4
 
 LINE_COLOR1         = $46
 LINE_COLOR2         = $36
@@ -41,7 +41,7 @@ LINE_COLOR6         = $86
 ; OVERSCAN_TIMER      = 45
 
 ; BG_COLOR            = $08
-; PLAYER_COLOR        = $46
+; PLAYER_COLOR        = $44
 
 ; LINE_COLOR1         = $62
 ; LINE_COLOR2         = $64
@@ -53,7 +53,7 @@ LINE_COLOR6         = $86
 NUMBER_LINES        = 6 
 HEIGHT_BORDER       = 16
 HEIGHT_PLAYER       = 4
-BALL_SIZE           = 3
+HEIGHT_BALL         = 3
 SPEED_LEFT          = 3
 SPEED_LEFT_HEX      = $30
 SPEED_RIGHT         = 3
@@ -75,13 +75,15 @@ LINES_PFS0      ds  NUMBER_LINES
 LINES_PFS1      ds  NUMBER_LINES
 LINES_PFS2      ds  NUMBER_LINES
 LINES_PFS3      ds  NUMBER_LINES
-BALL_POS        ds  1
+PLAYER_POS      ds  1
+BALL_PHORZ      ds  1
+BALL_PVERT      ds  1
 BALL_STATUS     ds  1
 ;   BALL_STATUS DECODER
 ;      BIT         ACTION
-;       0           LIVE?
-;       1           MOVE_RIGHT?
-;       2           MOVE_UP?
+;       0           Live?
+;       1           Move Down?
+;       2           Move Right?
 ;      4-7          SPEED BALL
 ;===================================================================
 ;===================================================================
@@ -137,9 +139,14 @@ PosPlayer1:
     DEY
     BPL PosPlayer1
     STA RESP1
+    STA RESM1
 
     LDA #68
-    STA BALL_POS
+    STA PLAYER_POS
+    LDA #75
+    STA BALL_PHORZ
+    LDA #(SCAN_POS_PLAYER-16)
+    STA BALL_PVERT
     LDA #$16
     STA BALL_STATUS
 
@@ -147,6 +154,7 @@ PosPlayer1:
     STA HMP0
     LDA #$20
     STA HMP1
+    STA HMM1
     STA WSYNC
     STA WSYNC
     STA HMOVE
@@ -216,18 +224,16 @@ WsynWait:               ; ...waiting 3 scanlines
 ;===================================================================
     LDA #$80
     AND INPT4
-    BEQ FIRE
+    BEQ Fire
     AND INPT5
-    BEQ FIRE
+    BEQ Fire
     JMP Controllers
 
-FIRE:
+Fire:
     LDA BALL_STATUS
     AND #1
     BNE Controllers
-    INC BALL_STATUS
     LDA #$17
-    AND BALL_STATUS
     STA BALL_STATUS
 
 Controllers:
@@ -235,62 +241,108 @@ Controllers:
     ; Left
     TXA
     AND #$40
-    BEQ Move_left
+    BEQ MovePLeft
     TXA
     AND #$04
-    BEQ Move_left
+    BEQ MovePLeft
     TXA
     AND #$80
-    BEQ Move_right
+    BEQ MovePRight
     TXA
     AND #$08
-    BEQ Move_right
-    JMP No_move
+    BEQ MovePRight
+    JMP NoMove
 
-Move_left:
-    LDX BALL_POS
+MovePLeft:
+    LDX PLAYER_POS
     CPX #25
-    BMI No_move
+    BMI NoMove
     LDA #SPEED_LEFT_HEX
     STA HMP1
-    LDA BALL_POS
+    LDA PLAYER_POS
     SEC
     SBC #SPEED_LEFT
-    STA BALL_POS
-    JMP No_move
-Move_right: 
-    LDX BALL_POS
+    STA PLAYER_POS
+    JMP NoMove
+MovePRight: 
+    LDX PLAYER_POS
     CPX #112
-    BPL No_move
+    BPL NoMove
     LDA #SPEED_RIGHT_HEX
     STA HMP1
-    LDA BALL_POS
+    LDA PLAYER_POS
     CLC
     ADC #SPEED_RIGHT
-    STA BALL_POS
-No_move:
+    STA PLAYER_POS
+NoMove:
+
+
+; Ball Moviment
+    LDA BALL_STATUS
+    TAY
+    AND #1
+    BEQ NoMoveBall
+    ;Move
+    TYA
+    LSR
+    LSR
+    LSR
+    LSR
+    TAX
+    ;MoveVert
+    TYA
+    AND #2
+    BEQ MoveUP
+; MoveDown:
+    TXA
+    EOR #$FF
+    SEC
+    ADC BALL_PVERT
+
+    JMP MoveHorz
+MoveUP:
+    TXA
+    CLC
+    ADC BALL_PVERT
+MoveHorz:
+    STA BALL_PVERT 
+
+    TYA
+    AND #4
+    BEQ MoveBLeft
+    ;MoveBRight
+    TXA
+    CLC
+    ADC BALL_PHORZ
+    TYA
+    AND #$F0
+    EOR #$F0
+    CLC
+    ADC #$10
+    JMP Moved
+MoveBLeft:
+    TXA
+    EOR #$FF
+    SEC
+    ADC BALL_PHORZ
+    TYA
+    AND #$F0
+Moved:
+    STA HMM1
+    STA BALL_PHORZ
+NoMoveBall:
 
 ; PreparePlayfield:     ; Preparing graph registers to start hot scanlines
-    LDA #0
-    STA PF0
-    STA PF1
-    STA PF2
-    STA GRP0
-    STA GRP1
-    STA ENAM0 
-    STA ENAM1
-    STA ENABL
-    STA WSYNC
-    STA COUNT_SCANLINES
     LDA #BG_COLOR
     STA COLUPF
-    LDA #$21
+    LDA #$11
     STA CTRLPF          ; Control Mode Playfield to Board (PlayField Reflect)
 
 WaitVblankEnd:
     LDA INTIM
     BNE WaitVblankEnd
 
+    TAY
     STA WSYNC
     STA HMOVE
     STA WSYNC
@@ -303,10 +355,12 @@ WaitVblankEnd:
 ;                         PRINT SCREEN MOMENT (HOT SCANLINES)
 
 ; Start Visible Scanlines:
-
+    LDX #ENAM1
+    TXS
 ; Print Score
 StartScore:   
-    JSR NewLine
+    INY
+    STA WSYNC
     CPY #(SCAN_START_BORDER-1)
     BCC StartScore
 
@@ -317,34 +371,48 @@ StartScore:
     STA GRP0
     STX PF1
     STA PF2 
-    INC COUNT_SCANLINES
+    INY
 StartBorder:
-    JSR NewLine
+    INY
+    STA WSYNC
     CPY #(SCAN_START_BORDER+HEIGHT_BORDER-1)
     BCC StartBorder
     
 ; StopBoard:
-    INC COUNT_SCANLINES
+    INY
     STA WSYNC
     LDA #$FF
     LDX #0
     STX PF1
     STX PF2 
     STA ENAM0
-    LDA #$20
+    LDA #$10
     STA CTRLPF ; Control Mode Playfield to Lines
 
 WaitStartLines:
-    JSR NewLine
+    INY
+    TYA
+    SEC
+    SBC BALL_PVERT
+    AND #($FF-HEIGHT_BALL)
+    PHP
+    PLA
+    STA WSYNC
     CPY #(SCAN_START_LINES-1)
     BCC WaitStartLines
-
+    
+    STY COUNT_SCANLINES
 ; Print Lines
     LDX #(NUMBER_LINES-1)
     LDY #(HEIGHT_LINES-1)
 PrintLines:
     INC COUNT_SCANLINES
     STA WSYNC
+    LDA COUNT_SCANLINES
+    SEC
+    SBC BALL_PVERT
+    AND #($FF-HEIGHT_BALL)
+    PHP
     LDA LINE_COLORS,X
     STA COLUPF
     LDA LINES_PFS0,X
@@ -352,21 +420,40 @@ PrintLines:
     LDA LINES_PFS1,X
     STA PF2
     LDA LINES_PFS2,X
-    NOP
     STA PF0
     LDA LINES_PFS3,X
-    NOP
-    NOP
     STA PF1
+    PLA
     LDA #0
-    NOP
-    NOP
     STA PF2
     STA PF0
 
     DEY
     BPL PrintLines
     LDY #(HEIGHT_LINES-1)
+    
+    INC COUNT_SCANLINES
+    STA WSYNC
+    LDA COUNT_SCANLINES
+    SEC
+    SBC BALL_PVERT
+    AND #($FF-HEIGHT_BALL)
+    PHP
+    LDA LINE_COLORS,X
+    STA COLUPF
+    LDA LINES_PFS0,X
+    STA PF1
+    LDA LINES_PFS1,X
+    STA PF2
+    LDA LINES_PFS2,X
+    STA PF0
+    LDA LINES_PFS3,X
+    STA PF1
+    PLA
+    LDA #0
+    STA PF2
+    STA PF0
+
     DEX
     BPL PrintLines
 
@@ -375,32 +462,56 @@ PrintLines:
     STA PF1
     STA PF2
     INC COUNT_SCANLINES
+    LDY COUNT_SCANLINES
 
 WaitStartPlayer:  
-    JSR NewLine
+    INY
+    TYA
+    SEC
+    SBC BALL_PVERT
+    AND #($FF-HEIGHT_BALL)
+    PHP
+    PLA
+    STA WSYNC
     CPY #SCAN_POS_PLAYER
     BNE WaitStartPlayer
 
-    INC COUNT_SCANLINES
-    LDA #$FF
+    INY
     STA WSYNC
+    LDA #$FF
     STA GRP1
 
     LDX #HEIGHT_PLAYER
 PrintPlay:
-    INC COUNT_SCANLINES
-    STA WSYNC
+    INY
+    TYA
+    SEC
+    SBC BALL_PVERT
+    AND #($FF-HEIGHT_BALL)
+    PHP
+    PLA
     DEX
+    STA WSYNC
     BNE PrintPlay
     STX GRP0
     STX GRP1
     STX ENAM0 
 
+    DEX
+    TXS
 ;=============================================================================================
 ;                                  OVERSCAN
 ;=============================================================================================
+    
 ScanlineEnd:
-    JSR NewLine
+    INY
+    STA WSYNC
+    TYA
+    SEC
+    SBC BALL_PVERT
+    AND #($FF-HEIGHT_BALL)
+    PHP
+    PLA
     CPY #(KERNEL_SCANLINE-1)
     BNE ScanlineEnd
 
@@ -408,7 +519,14 @@ Overscan:
     LDA #OVERSCAN_TIMER     ; Timing OverScanlines
     STA TIM64T
 
+    LDA #0
     STA WSYNC
+    STA ENAM1               ; "Ball" dead
+
+;===================================================================
+;                     Overscan code area
+;===================================================================
+
     LDA #%01000010          ; "Turn Off Cathodic Ray"
     STA VBLANK      
 
@@ -416,15 +534,6 @@ WaintOverscanEnd:           ; Timing OverScanlines
     LDA INTIM
     BNE WaintOverscanEnd
     JMP StartFrame          ; Back to Start  
-;=============================================================================================
-;             				Functions
-;=============================================================================================
-
-NewLine:
-    INC COUNT_SCANLINES
-    LDY COUNT_SCANLINES
-    STA WSYNC
-    RTS
 
 ;=============================================================================================
 ;             				DATA DECLARATION
