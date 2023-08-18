@@ -16,7 +16,7 @@
 ;===================================================================
 ;                       NTSC
 KERNEL_SCANLINE     = 192
-SCAN_START_BORDER   = 14
+SCAN_START_BORDER   = 16
 HEIGHT_LINES        = 6
 
 VBLANK_TIMER        = 43
@@ -34,7 +34,7 @@ LINE_COLOR6         = $86
 ;===================================================================
 ;                       PAL
 ; KERNEL_SCANLINE     = 228
-; SCAN_START_BORDER   = 22
+; SCAN_START_BORDER   = 24
 ; HEIGHT_LINES        = 8
 
 ; VBLANK_TIMER        = 52
@@ -59,6 +59,7 @@ SPEED_LEFT_HEX      = $30
 SPEED_RIGHT         = 3
 SPEED_RIGHT_HEX     = $D0
 LAST_SCANLINE       = KERNEL_SCANLINE-3
+SCAN_START_SCORE    = (SCAN_START_BORDER-10)-2
 SCAN_POS_PLAYER     = (LAST_SCANLINE - HEIGHT_PLAYER)
 SCAN_START_LINES    = (SCAN_START_BORDER + HEIGHT_BORDER + 21)
 
@@ -85,6 +86,9 @@ BALL_STATUS     ds  1
 ;       1           Move up?
 ;       2           Move Right?
 ;      4-7          SPEED BALL
+SCORE           ds  2
+SCORE_MASK      ds  1
+POINTER_SCORE   ds  8
 ;===================================================================
 ;===================================================================
 ;                       CODE SEGMENT
@@ -166,6 +170,9 @@ PosPlayer1:
     STA NUSIZ0
     LDA #$15
     STA NUSIZ1
+    ; Control Mode Playfield to Score (No PlayField Reflect)
+    LDA #0
+    STA CTRLPF          
 
     ; Load Colors of lines
     LDA #LINE_COLOR1
@@ -336,14 +343,69 @@ NoMoveBall:
 ; PreparePlayfield:     ; Preparing graph registers to start hot scanlines
     LDA #BG_COLOR
     STA COLUPF
-    LDA #$11
-    STA CTRLPF          ; Control Mode Playfield to Board (PlayField Reflect)
+
+; Score Pointer
+    ;D0
+    LDA SCORE
+    AND #$F0
+    LSR
+    LSR
+    LSR
+    LSR
+    TAX
+    CPX #0
+    BEQ  DigitBlank
+    LDA #<Data0
+    LDY #>Data0
+    JMP DigitAjust
+DigitBlank:
+    LDA #<DataEmpty
+    LDY #>DataEmpty
+DigitAjust:
+    JSR AjustPointerScore
+    STA POINTER_SCORE
+    STY POINTER_SCORE+1
+
+    ;D2
+    LDA SCORE+1
+    AND #$F0
+    LSR
+    LSR
+    LSR
+    LSR
+    TAX
+    LDA #<Data0R
+    LDY #>Data0R
+    JSR AjustPointerScore
+    STA POINTER_SCORE+4
+    STY POINTER_SCORE+5
+
+    ;D1
+    LDA SCORE
+    AND #$0F
+    TAX
+    LDA #<Data0
+    LDY #>Data0
+    JSR AjustPointerScore
+    STA POINTER_SCORE+2
+    STY POINTER_SCORE+3
+
+    ;D3
+    LDA SCORE+1
+    AND #$0F
+    TAX
+    LDA #<Data0R
+    LDY #>Data0R
+    JSR AjustPointerScore
+    STA POINTER_SCORE+6
+    STY POINTER_SCORE+7
+
 
 WaitVblankEnd:
     LDA INTIM
     BNE WaitVblankEnd
 
-    TAY
+    TYA ; A:=0
     STA WSYNC
     STA HMOVE
     STA CXCLR 
@@ -357,14 +419,53 @@ WaitVblankEnd:
 ;                         PRINT SCREEN MOMENT (HOT SCANLINES)
 
 ; Start Visible Scanlines:
-    LDX #ENAM1
-    TXS
-; Print Score
-StartScore:   
+WaitPrintScore:
+    INY
+    STA WSYNC
+    CPY #(SCAN_START_SCORE-1)
+    BCC WaitPrintScore
+
+    STY COUNT_SCANLINES
+    LDY #0
+StartScore: 
+    ;D0-1
+    LDA (POINTER_SCORE),Y
+    AND #$F0
+    STA SCORE_MASK
+    STA WSYNC
+    LDA (POINTER_SCORE+2),Y
+    AND #$0F
+    ORA SCORE_MASK
+    STA PF1
+    ;D2-3
+    LDA (POINTER_SCORE+6),Y
+    AND #$F0
+    STA SCORE_MASK
+    LDA (POINTER_SCORE+4),Y
+    AND #$0F
+    ORA SCORE_MASK
+    STA PF2
+
+    LDA #0
+    NOP
+    INY
+    STA PF1
+    STA PF2
+    CPY #10
+    BCC StartScore
+
+    TYA
+    CLC
+    ADC COUNT_SCANLINES
+    STA COUNT_SCANLINES
+    TAY
+    LDA #$01
+    STA CTRLPF   
+WaitPrintBoard:
     INY
     STA WSYNC
     CPY #(SCAN_START_BORDER-1)
-    BCC StartScore
+    BCC WaitPrintBoard
 
 ; Print Border:
     LDA #$FF
@@ -381,6 +482,8 @@ StartBorder:
     CPY #(SCAN_START_BORDER+HEIGHT_BORDER-1)
     BCC StartBorder
     
+    LDX #ENAM1
+    TXS
 ; StopBoard:
     INY
     STA WSYNC
@@ -389,8 +492,13 @@ StartBorder:
     STX PF1
     STX PF2 
     STA ENAM0
-    LDA #$10
-    STA CTRLPF ; Control Mode Playfield to Lines
+    STX CTRLPF ; Control Mode Playfield to Lines
+    TYA
+    SEC
+    SBC BALL_PVERT
+    AND #($FF-HEIGHT_BALL)
+    PHP
+    PLA
 
 WaitStartLines:
     STA WSYNC
@@ -466,6 +574,7 @@ PrintLines:
     STA WSYNC
     STA PF1
     STA PF2
+    INY
     TYA
     SEC
     SBC BALL_PVERT
@@ -473,7 +582,7 @@ PrintLines:
     PHP
     PLA
 
-WaitStartPlayer:  
+WaitStartPlayer: 
     STA WSYNC
     INY
     TYA
@@ -529,6 +638,8 @@ ScanlineEnd:
     CPY #(KERNEL_SCANLINE-1)
     BNE ScanlineEnd
     
+    LDX #$FF
+    TXS
 Overscan:
     LDA #OVERSCAN_TIMER     ; Timing OverScanlines
     STA TIM64T
@@ -540,6 +651,16 @@ Overscan:
 ;===================================================================
 ;                     Overscan code area
 ;===================================================================
+    SED
+    LDA SCORE+1
+    CLC
+    ADC #1
+    STA SCORE+1
+    LDA SCORE
+    ADC #0
+    STA SCORE
+    CLD
+
 
 ; Colision Ball with wall and dead
     LDA BALL_STATUS
@@ -562,7 +683,7 @@ CollPlayer:
 
 CollVert:
     LDY BALL_PVERT
-    CPY #(SCAN_START_BORDER+HEIGHT_BORDER+2)
+    CPY #(SCAN_START_BORDER+HEIGHT_BORDER+1)
     BCS CollHoriz
     ; Top collision
     LDA #$FD
@@ -573,7 +694,7 @@ CollHoriz:
     LDY BALL_PHORZ
     ; Left
     CPY #25
-    BPL CollCheckRight
+    BCS CollCheckRight
     LDA #$04
     ORA BALL_STATUS
     STA BALL_STATUS
@@ -583,7 +704,7 @@ CollHoriz:
 CollCheckRight:
     ; Right
     CPY #126
-    BMI NoCollision
+    BCC NoCollision
     LDA #$FB
     AND BALL_STATUS
     STA BALL_STATUS
@@ -599,8 +720,242 @@ WaintOverscanEnd:           ; Timing OverScanlines
     JMP StartFrame          ; Back to Start  
 
 ;=============================================================================================
-;             				DATA DECLARATION
+;             				FUNCTION DECLARATION
 ;=============================================================================================
+
+AjustPointerScore:
+    CPX #0
+    BEQ OutAjust
+NoCheckZero:
+    CLC
+    ADC #20
+    BCC NoCarryPointer
+    INY
+NoCarryPointer:
+    DEX
+    BNE NoCheckZero
+OutAjust:
+    RTS
+
+;=============================================================================================
+;             				  DATA DECLARATION
+;=============================================================================================
+
+DataEmpty:
+    ; Empty
+    .byte #0,#0,#0,#0,#0,#0,#0,#0,#0,#0
+Data0:
+    ;0 
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%11101110
+    .byte #%11101110
+Data0R:
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01110111
+    .byte #%01110111
+    ;1 
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    ;2
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%10001000
+    .byte #%10001000
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%00010001
+    .byte #%00010001
+    .byte #%01110111
+    .byte #%01110111  
+    ;3
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01110111
+    .byte #%01110111
+    ;4
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    ;5
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%10001000
+    .byte #%10001000
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%00010001
+    .byte #%00010001
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01110111
+    .byte #%01110111
+    ;6
+    .byte #%10001000
+    .byte #%10001000
+    .byte #%10001000
+    .byte #%10001000
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%00010001
+    .byte #%00010001
+    .byte #%00010001
+    .byte #%00010001
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01110111
+    .byte #%01110111
+    ;7
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    ;8
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01110111
+    .byte #%01110111
+    ;9
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%10101010
+    .byte #%10101010
+    .byte #%11101110
+    .byte #%11101110
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%00100010
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01010101
+    .byte #%01010101
+    .byte #%01110111
+    .byte #%01110111
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
+    .byte #%01000100
 
     ORG $FFFA
 
