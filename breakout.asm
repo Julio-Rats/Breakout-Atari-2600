@@ -82,7 +82,7 @@ BALL_STATUS     ds  1
 ;   BALL_STATUS DECODER
 ;      BIT         ACTION
 ;       0           Live?
-;       1           Move Down?
+;       1           Move up?
 ;       2           Move Right?
 ;      4-7          SPEED BALL
 ;===================================================================
@@ -145,7 +145,7 @@ PosPlayer1:
     STA PLAYER_POS
     LDA #75
     STA BALL_PHORZ
-    LDA #(SCAN_POS_PLAYER-16)
+    LDA #KERNEL_SCANLINE
     STA BALL_PVERT
     LDA #$16
     STA BALL_STATUS
@@ -314,6 +314,7 @@ MoveHorz:
     TXA
     CLC
     ADC BALL_PHORZ
+    STA BALL_PHORZ
     TYA
     AND #$F0
     EOR #$F0
@@ -325,11 +326,11 @@ MoveBLeft:
     EOR #$FF
     SEC
     ADC BALL_PHORZ
+    STA BALL_PHORZ
     TYA
     AND #$F0
 Moved:
     STA HMM1
-    STA BALL_PHORZ
 NoMoveBall:
 
 ; PreparePlayfield:     ; Preparing graph registers to start hot scanlines
@@ -345,6 +346,7 @@ WaitVblankEnd:
     TAY
     STA WSYNC
     STA HMOVE
+    STA CXCLR 
     STA WSYNC
     STA HMCLR
     STA VBLANK          ; Stop Vblank
@@ -367,11 +369,12 @@ StartScore:
 ; Print Border:
     LDA #$FF
     LDX #$3F
+    INY
     STA WSYNC
     STA GRP0
     STX PF1
     STA PF2 
-    INY
+
 StartBorder:
     INY
     STA WSYNC
@@ -390,6 +393,7 @@ StartBorder:
     STA CTRLPF ; Control Mode Playfield to Lines
 
 WaitStartLines:
+    STA WSYNC
     INY
     TYA
     SEC
@@ -397,7 +401,6 @@ WaitStartLines:
     AND #($FF-HEIGHT_BALL)
     PHP
     PLA
-    STA WSYNC
     CPY #(SCAN_START_LINES-1)
     BCC WaitStartLines
     
@@ -405,6 +408,7 @@ WaitStartLines:
 ; Print Lines
     LDX #(NUMBER_LINES-1)
     LDY #(HEIGHT_LINES-1)
+
 PrintLines:
     INC COUNT_SCANLINES
     STA WSYNC
@@ -457,14 +461,20 @@ PrintLines:
     DEX
     BPL PrintLines
 
+    LDY COUNT_SCANLINES
 ; Stop Lines
     STA WSYNC
     STA PF1
     STA PF2
-    INC COUNT_SCANLINES
-    LDY COUNT_SCANLINES
+    TYA
+    SEC
+    SBC BALL_PVERT
+    AND #($FF-HEIGHT_BALL)
+    PHP
+    PLA
 
 WaitStartPlayer:  
+    STA WSYNC
     INY
     TYA
     SEC
@@ -472,16 +482,15 @@ WaitStartPlayer:
     AND #($FF-HEIGHT_BALL)
     PHP
     PLA
-    STA WSYNC
     CPY #SCAN_POS_PLAYER
     BNE WaitStartPlayer
 
-    INY
     STA WSYNC
     LDA #$FF
     STA GRP1
 
     LDX #HEIGHT_PLAYER
+
 PrintPlay:
     INY
     TYA
@@ -493,39 +502,93 @@ PrintPlay:
     DEX
     STA WSYNC
     BNE PrintPlay
-    STX GRP0
-    STX GRP1
-    STX ENAM0 
-
-    DEX
-    TXS
-;=============================================================================================
-;                                  OVERSCAN
-;=============================================================================================
-    
-ScanlineEnd:
     INY
-    STA WSYNC
     TYA
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
     PHP
     PLA
+    STX GRP0
+    STX GRP1
+    STX ENAM0 
+
+;=============================================================================================
+;                                  OVERSCAN
+;=============================================================================================
+    
+ScanlineEnd:
+    TYA
+    SEC
+    SBC BALL_PVERT
+    AND #($FF-HEIGHT_BALL)
+    PHP
+    PLA
+    STA WSYNC
+    INY
     CPY #(KERNEL_SCANLINE-1)
     BNE ScanlineEnd
-
+    
 Overscan:
     LDA #OVERSCAN_TIMER     ; Timing OverScanlines
     STA TIM64T
 
     LDA #0
-    STA WSYNC
     STA ENAM1               ; "Ball" dead
+    STA WSYNC
 
 ;===================================================================
 ;                     Overscan code area
 ;===================================================================
+
+; Colision Ball with wall and dead
+    LDA BALL_STATUS
+    AND #1
+    BEQ NoCollision
+    ; Dead Ball?
+    LDA BALL_PVERT
+    CMP #KERNEL_SCANLINE
+    BCC CollPlayer
+    LDA #$16
+    STA BALL_STATUS
+CollPlayer:
+    LDA CXM1P
+    AND #$40
+    BEQ CollVert
+    ; Player Collision
+    LDA #$02
+    ORA BALL_STATUS
+    STA BALL_STATUS
+
+CollVert:
+    LDY BALL_PVERT
+    CPY #(SCAN_START_BORDER+HEIGHT_BORDER+2)
+    BCS CollHoriz
+    ; Top collision
+    LDA #$FD
+    AND BALL_STATUS
+    STA BALL_STATUS
+
+CollHoriz:
+    LDY BALL_PHORZ
+    ; Left
+    CPY #25
+    BPL CollCheckRight
+    LDA #$04
+    ORA BALL_STATUS
+    STA BALL_STATUS
+
+    JMP NoCollision
+
+CollCheckRight:
+    ; Right
+    CPY #126
+    BMI NoCollision
+    LDA #$FB
+    AND BALL_STATUS
+    STA BALL_STATUS
+
+NoCollision:
 
     LDA #%01000010          ; "Turn Off Cathodic Ray"
     STA VBLANK      
