@@ -405,7 +405,7 @@ WaitVblankEnd:
     LDA INTIM
     BNE WaitVblankEnd
 
-    TYA ; A:=0
+    TAY ; A:=0
     STA WSYNC
     STA HMOVE
     STA CXCLR 
