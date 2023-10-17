@@ -17,7 +17,7 @@
 ;                       NTSC
 KERNEL_SCANLINE     = 192
 SCAN_START_BORDER   = 16
-HEIGHT_LINES        = 6
+HEIGHT_LINES        = 8
 
 VBLANK_TIMER        = 43
 OVERSCAN_TIMER      = 38
@@ -31,6 +31,7 @@ LINE_COLOR3         = $26
 LINE_COLOR4         = $16
 LINE_COLOR5         = $C6
 LINE_COLOR6         = $86
+
 ;===================================================================
 ;                       PAL
 ; KERNEL_SCANLINE     = 228
@@ -49,6 +50,7 @@ LINE_COLOR6         = $86
 ; LINE_COLOR4         = $26
 ; LINE_COLOR5         = $56
 ; LINE_COLOR6         = $D6
+
 ;===================================================================
 PLAYER_LIFE         = 4
 NUMBER_LINES        = 6 
@@ -72,9 +74,9 @@ SCAN_START_LINES    = (SCAN_START_BORDER + HEIGHT_BORDER + 21)
     ORG   $80
 
 COUNT_FRAMES    ds  1
+SCORE_MASK      ds  1
 COUNT_SCANLINES ds  1
 COUNT_LIFE      ds  1
-LINE_COLORS     ds  NUMBER_LINES
 LINES_PFS0      ds  NUMBER_LINES
 LINES_PFS1      ds  NUMBER_LINES
 LINES_PFS2      ds  NUMBER_LINES
@@ -90,9 +92,9 @@ BALL_STATUS     ds  1
 ;       2           Move Right?
 ;      4-7          SPEED BALL
 SCORE           ds  2
-SCORE_MASK      ds  1
 POINTER_SCORE   ds  8
 POINTER_LIFE    ds  2
+
 ;===================================================================
 ;===================================================================
 ;                       CODE SEGMENT
@@ -184,36 +186,10 @@ PosPlayer1:
     STA SWACNT 
     STA SWBCNT 
 
-    ; Load Colors of lines
-    LDA #LINE_COLOR1
-    STA LINE_COLORS+5
-    LDA #LINE_COLOR2
-    STA LINE_COLORS+4
-    LDA #LINE_COLOR3
-    STA LINE_COLORS+3
-    LDA #LINE_COLOR4
-    STA LINE_COLORS+2
-    LDA #LINE_COLOR5
-    STA LINE_COLORS+1
-    LDA #LINE_COLOR6
-    STA LINE_COLORS
-    
-    ; Set PF Color Lines
-    LDX #(NUMBER_LINES-1)
-SetPFColorLines:
-    LDA #$3F
-    STA LINES_PFS0,X 
-    LDA #$FF
-    STA LINES_PFS1,X
-    STA LINES_PFS2,X
-    STA LINES_PFS3,X
-    DEX
-    BPL SetPFColorLines
+    ; Reset Game and Set Pointers
+    JSR ResetGame
+    JSR SetScorePointers
 
-    ; Set Pointer of Graph PF Digit life
-    LDA #PLAYER_LIFE
-    STA COUNT_LIFE
-    
     LDA #%01000010  ; Starting Vblank
     STA VBLANK  
 
@@ -237,11 +213,21 @@ WsynWait:
     STA TIM64T
     
 ;===================================================================
+;===================================================================
 ;                     Vblank code area
+;===================================================================
 ;===================================================================
     INC COUNT_FRAMES
 
-    ; INPUT CONTROL PROCESSING AREA
+;===================================================================
+;               INPUT CONTROL PROCESSING AREA
+;===================================================================
+    ; Reset Switches
+    LDA SWCHB
+    AND #$01
+    BNE P_Control
+    JSR ResetGame
+P_Control:
     ; Start Ball if ball is dead (button control)
     LDA BALL_STATUS
     AND #1
@@ -255,8 +241,13 @@ WsynWait:
     JMP Controllers
     ; Ball is dead and button is push
 Fire:
+    ; Verify Count Life 
+    LDA COUNT_LIFE
+    BEQ Controllers
     ; Ball Parameter Defaults
-    LDA #$17
+    LDA COUNT_FRAMES    
+    AND #$04            ; Random Horz Start (Left or Right)
+    ORA #$13
     STA BALL_STATUS
     ; Get input controls to move the player (platform)
 Controllers:
@@ -369,75 +360,6 @@ NoMoveBall:
 ; PreparePlayfield:     ; Preparing graph registers to start hot scanlines
     LDA #BORDER_COLOR
     STA COLUPF
-
-; Score Pointer
-    ; Get BCD of Digit 0 (Most Significant Digit)
-    LDA SCORE
-    AND #$F0
-    ; Shift for memory pointer
-    LDX #4
-ShiftScoreDigit0:
-    LSR
-    DEX
-    BNE ShiftScoreDigit0
-    ; Adjusts the pointer to the digit, using the function 'AjustPointerScore' 
-    TAX
-    CPX #0
-    BEQ DigitBlank
-    LDA #<Data0
-    LDY #>Data0
-    JMP DigitAjust
-    ; Invisible Digit if Score is Less than 1000.
-DigitBlank:
-    LDA #<DataEmpty
-    LDY #>DataEmpty
-DigitAjust:
-    JSR AjustPointerScore
-    STA POINTER_SCORE
-    STY POINTER_SCORE+1
-    ; Get BCD of Digit 2
-    LDA SCORE+1
-    AND #$F0
-    ; Shift for memory pointer
-    LDX #4
-ShiftScoreDigit2:
-    LSR
-    DEX
-    BNE ShiftScoreDigit2
-    ; Adjusts the pointer to the digit, using the function 'AjustPointerScore' 
-    TAX
-    LDA #<Data0R
-    LDY #>Data0R
-    JSR AjustPointerScore
-    STA POINTER_SCORE+4
-    STY POINTER_SCORE+5
-    ; Get BCD of Digit 1
-    LDA SCORE
-    AND #$0F
-    TAX
-    LDA #<Data0
-    LDY #>Data0
-    JSR AjustPointerScore
-    STA POINTER_SCORE+2
-    STY POINTER_SCORE+3
-    ; Get BCD of Digit 3
-    LDA SCORE+1
-    AND #$0F
-    ; Adjusts the pointer to the digit, using the function 'AjustPointerScore' 
-    TAX
-    LDA #<Data0R
-    LDY #>Data0R
-    JSR AjustPointerScore
-    STA POINTER_SCORE+6
-    STY POINTER_SCORE+7
-
-;Ajust Pointer for Count Life
-    LDX COUNT_LIFE
-    LDA #<Data0
-    LDY #>Data0
-    JSR AjustPointerScore
-    STA POINTER_LIFE
-    STY POINTER_LIFE+1
 
     ; Wait Rest of Existing Vblank (Async Clock)
 WaitVblankEnd:
@@ -609,7 +531,7 @@ PrintLines:
     AND #($FF-HEIGHT_BALL)
     PHP
     ; Set Line Color
-    LDA LINE_COLORS,X
+    LDA LineColors,X
     STA COLUPF
     ; Get PF of lines
     LDA LINES_PFS0,X
@@ -636,7 +558,7 @@ PrintLines:
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
     PHP
-    LDA LINE_COLORS,X
+    LDA LineColors,X
     STA COLUPF
     LDA LINES_PFS0,X
     STA PF1
@@ -707,7 +629,7 @@ PrintPlay:
     AND #($FF-HEIGHT_BALL)
     PHP
     PLA
-    STX GRP0
+    STX GRP0 ; X:=0
     STX GRP1
     STX ENAM0 
 
@@ -730,7 +652,7 @@ ScanlineEnd:
     LDX #$FF
     TXS
 ;***********************************************************
-;      Over Stack Call Danger Zone (JSR available)
+;      End Stack Danger Zone (JSR available)
 ;***********************************************************
 
 ;=============================================================================================
@@ -744,26 +666,23 @@ Overscan:
     LDA #OVERSCAN_TIMER     ; Timing OverScanlines
     STA TIM64T
 
-    LDA #0
-    STA ENAM1               ; "Ball" below the screen
+    INX ; X:=0
+    STX ENAM1               ; "Ball" below the screen
     STA WSYNC
 
 ;===================================================================
-;                     Overscan code area
+;===================================================================
+;                     Overscan Code Area
+;===================================================================
 ;===================================================================
     ; Score Test (Auto Increment Every Frame)
-    SED
-    LDA SCORE+1
-    CLC
-    ADC #1
-    STA SCORE+1
-    LDA SCORE
-    ADC #0
-    STA SCORE
-    CLD
+    JSR SetScorePointers
+    JSR AddScore
 
-
-; Colision Ball with wall and dead
+;===================================================================
+;                  COLLISION PROCESSING AREA
+;===================================================================
+; Collision Ball with wall or dead
     LDA BALL_STATUS
     AND #1
     BEQ NoCollision
@@ -772,6 +691,7 @@ Overscan:
     CMP #KERNEL_SCANLINE
     BCC CollPlayer
     LDA #$16
+    DEC COUNT_LIFE
     STA BALL_STATUS
     ; Collision Ball With Player
 CollPlayer:
@@ -824,7 +744,9 @@ WaintOverscanEnd:           ; Timing OverScanlines
     JMP StartFrame          ; Back to Start  
 
 ;=============================================================================================
+;=============================================================================================
 ;             				FUNCTION DECLARATION
+;=============================================================================================
 ;=============================================================================================
 
 ; FUNCTION AjustPointerScore (A:=A+20*X):
@@ -845,225 +767,349 @@ NoCarryPointer:
 OutAjust:
     RTS
 
+; FUNCTION ResetGame (None):
+;   Restore Ball, Life, Color Lines and Score
+ResetGame:
+    ; Set PF Color Lines (Reset Lines)
+    LDX #(NUMBER_LINES-1)
+SetPFColorLines:
+    LDA #$3F
+    STA LINES_PFS0,X 
+    LDA #$FF
+    STA LINES_PFS1,X
+    STA LINES_PFS2,X
+    STA LINES_PFS3,X
+    DEX
+    BPL SetPFColorLines
+    INX     ;X:=0
+
+    ; Reset Score
+    STX SCORE
+    STX SCORE+1
+    ; Reset Ball
+    STX BALL_STATUS
+    LDA #KERNEL_SCANLINE
+    STA BALL_PVERT
+    ; Reset Life
+    LDA #PLAYER_LIFE
+    STA COUNT_LIFE
+    RTS
+
+; FUNCTION SetScorePointers (None):
+;   Set Score Graph Bitmap Pointers to Current Score
+SetScorePointers:
+    ; Score Pointer
+    ; Get BCD of Digit 0 (Most Significant Digit)
+    LDA SCORE
+    AND #$F0
+    ; Shift for memory pointer
+    LDX #4
+ShiftScoreDigit0:
+    LSR
+    DEX
+    BNE ShiftScoreDigit0
+    ; Adjusts the pointer to the digit, using the function 'AjustPointerScore' 
+    TAX
+    CPX #0
+    BEQ DigitBlank
+    LDA #<Data0
+    LDY #>Data0
+    JMP DigitAjust
+    ; Invisible Digit if Score is Less than 1000.
+DigitBlank:
+    LDA #<DataEmpty
+    LDY #>DataEmpty
+DigitAjust:
+    JSR AjustPointerScore
+    STA POINTER_SCORE
+    STY POINTER_SCORE+1
+    ; Get BCD of Digit 2
+    LDA SCORE+1
+    AND #$F0
+    ; Shift for memory pointer
+    LDX #4
+ShiftScoreDigit2:
+    LSR
+    DEX
+    BNE ShiftScoreDigit2
+    ; Adjusts the pointer to the digit, using the function 'AjustPointerScore' 
+    TAX
+    LDA #<Data0R
+    LDY #>Data0R
+    JSR AjustPointerScore
+    STA POINTER_SCORE+4
+    STY POINTER_SCORE+5
+    ; Get BCD of Digit 1
+    LDA SCORE
+    AND #$0F
+    TAX
+    LDA #<Data0
+    LDY #>Data0
+    JSR AjustPointerScore
+    STA POINTER_SCORE+2
+    STY POINTER_SCORE+3
+    ; Get BCD of Digit 3
+    LDA SCORE+1
+    AND #$0F
+    ; Adjusts the pointer to the digit, using the function 'AjustPointerScore' 
+    TAX
+    LDA #<Data0R
+    LDY #>Data0R
+    JSR AjustPointerScore
+    STA POINTER_SCORE+6
+    STY POINTER_SCORE+7
+    ; Ajust Pointer for Count Life
+    LDX COUNT_LIFE
+    LDA #<Data0
+    LDY #>Data0
+    JSR AjustPointerScore
+    STA POINTER_LIFE
+    STY POINTER_LIFE+1
+    RTS
+
+; FUNCTION AddScore (None):
+;   Increment one in Score (2 bytes in BCD mode)
+AddScore:
+    SED
+    LDA SCORE+1
+    CLC
+    ADC #1
+    STA SCORE+1
+    LDA SCORE
+    ADC #0
+    STA SCORE
+    CLD
+    RTS
+    
 ;=============================================================================================
 ;             				  DATA DECLARATION
 ;=============================================================================================
+;   Colors Lines Hex Code
+LineColors:
+    ; Load Colors of lines
+    .BYTE LINE_COLOR6
+    .BYTE LINE_COLOR5
+    .BYTE LINE_COLOR4
+    .BYTE LINE_COLOR3
+    .BYTE LINE_COLOR2
+    .BYTE LINE_COLOR1
+
 ;   Numbers Graph BitMap
 DataEmpty:
     ; Empty
-    .byte #0,#0,#0,#0,#0,#0,#0,#0,#0,#0
+    .BYTE #0,#0,#0,#0,#0,#0,#0,#0,#0,#0
 Data0:
     ;0 
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%11101110
-    .byte #%11101110
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%11101110
+    .BYTE #%11101110
 Data0R:
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01110111
-    .byte #%01110111
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01110111
+    .BYTE #%01110111
     ;1 
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
     ;2
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%10001000
-    .byte #%10001000
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%00010001
-    .byte #%00010001
-    .byte #%01110111
-    .byte #%01110111  
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%10001000
+    .BYTE #%10001000
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%00010001
+    .BYTE #%00010001
+    .BYTE #%01110111
+    .BYTE #%01110111  
     ;3
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01110111
-    .byte #%01110111
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01110111
+    .BYTE #%01110111
     ;4
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
     ;5
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%10001000
-    .byte #%10001000
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%00010001
-    .byte #%00010001
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01110111
-    .byte #%01110111
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%10001000
+    .BYTE #%10001000
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%00010001
+    .BYTE #%00010001
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01110111
+    .BYTE #%01110111
     ;6
-    .byte #%10001000
-    .byte #%10001000
-    .byte #%10001000
-    .byte #%10001000
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%00010001
-    .byte #%00010001
-    .byte #%00010001
-    .byte #%00010001
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01110111
-    .byte #%01110111
+    .BYTE #%10001000
+    .BYTE #%10001000
+    .BYTE #%10001000
+    .BYTE #%10001000
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%00010001
+    .BYTE #%00010001
+    .BYTE #%00010001
+    .BYTE #%00010001
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01110111
+    .BYTE #%01110111
     ;7
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
     ;8
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01110111
-    .byte #%01110111
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01110111
+    .BYTE #%01110111
     ;9
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%10101010
-    .byte #%10101010
-    .byte #%11101110
-    .byte #%11101110
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%00100010
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01010101
-    .byte #%01010101
-    .byte #%01110111
-    .byte #%01110111
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
-    .byte #%01000100
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%10101010
+    .BYTE #%10101010
+    .BYTE #%11101110
+    .BYTE #%11101110
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%00100010
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01010101
+    .BYTE #%01010101
+    .BYTE #%01110111
+    .BYTE #%01110111
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
+    .BYTE #%01000100
 
     ORG $FFFA
 
