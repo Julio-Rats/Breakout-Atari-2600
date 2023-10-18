@@ -244,6 +244,8 @@ Fire:
     ; Verify Count Life 
     LDA COUNT_LIFE
     BEQ Controllers
+    ; "Use" life
+    DEC COUNT_LIFE
     ; Ball Parameter Defaults
     LDA COUNT_FRAMES    
     AND #$04            ; Random Horz Start (Left or Right)
@@ -392,6 +394,7 @@ WaitVblankEnd:
 ;   Start Visible Scanlines
     ; Waiting for the Correct Scanline to Start Graphics
 WaitPrintScore:
+    ; Increment Y-ScanLine Count
     INY
     STA WSYNC
     CPY #(SCAN_START_SCORE-1)
@@ -401,13 +404,13 @@ WaitPrintScore:
     LDY #0
 StartScore: 
     ;D0-1
-    ; Get bitmap for the nth line of the Digit 0 (Most Significant Digit)
+    ; Get bitmap for the nº line of the Digit 0 (Most Significant Digit)
     LDA (POINTER_SCORE),Y
     ; Take the Left Mirror
     AND #$F0
     ; Save for Join
     STA SCORE_MASK
-    ; Get Bitmap for the nth Line of the Digit 1
+    ; Get Bitmap for the nº Line of the Digit 1
     LDA (POINTER_SCORE+2),Y
     STA WSYNC
     ; Take the Right Mirror
@@ -416,62 +419,71 @@ StartScore:
     ORA SCORE_MASK
     STA PF1
     ;D2-3
-    ; Get bitmap for the nth line of the Digit 2
+    ; Get bitmap for the nº line of the Digit 2
     LDA (POINTER_SCORE+6),Y
     ; Take the Left Mirror
     AND #$F0
     ; Save for Join
     STA SCORE_MASK
-    ; Get Bitmap for the nth Line of the Digit 3
+    ; Get Bitmap for the nº Line of the Digit 3
     LDA (POINTER_SCORE+4),Y
     ; Take the Right Mirror
     AND #$0F
     ; Merge the Bitmaps to the Playfield 2 Register
     ORA SCORE_MASK
     STA PF2
-    ; Get Bitmap for the nth Line of the Digit of Life Counter
+    ; Get Bitmap for the nº Line of the Digit of Life Counter
     LDA (POINTER_LIFE),Y
-     ; Take the Right Mirror
+    ; Take only the Right Mirror
     AND #$0F
+    ; Set in Playfild tile of digit
     STA PF1
     LDA #0
     NOP
     INY
     STA PF2
-    CPY #10
+    CPY #10     ; Lenght Bitmap (tile) of Digits (10 rows)
     BCC StartScore
 
+; After Score Area
+    ; Increment Y-ScanLine Count
     INY
     STA WSYNC
     STA PF1
     TYA
     CLC
+    ; Adds to the Counter Lines How Many Lines Used in the Scoreboard
     ADC COUNT_SCANLINES
     STA COUNT_SCANLINES
     TAY
-    ; Control Reflect Playfield for the color lines (No Reflection)
+    ; Control Reflect Playfield for the Color Lines (No Reflection)
     LDA #$01
     STA CTRLPF   
 
     ; Wait to Print Borders
 WaitPrintBord:
+    ; Increment Y-ScanLine Count
     INY
     STA WSYNC
     CPY #(SCAN_START_BORDER-1)
     BCC WaitPrintBord
 
     ; Start Print Borders
-; Print Border:
     LDA #$FF
     LDX #$3F
     INY
     STA WSYNC
+    ; Use Player to Make Left Border
     STA GRP0
+    ; Not use the Left Part of the Playfild 1
     STX PF1
     STA PF2 
+    ; Use Missile P0 to Make Right Border
+    STA ENAM0
 
     ; Make UP border
 StartBorder:
+    ; Increment Y-ScanLine Count
     INY
     STA WSYNC
     CPY #(SCAN_START_BORDER+HEIGHT_BORDER-1)
@@ -483,20 +495,19 @@ StartBorder:
 ;   Do not use stack or JSR inside danger zone, 
 ;    use stack only for print ball
 
-    ; Ttrick Using Stack Pointer To Print "Ball" (Missile 1)
+    ; Trick Using Stack Pointer To Print "Ball" (Missile P1)
     LDX #ENAM1
     TXS
 ; StopBord:
+    ; Increment Y-ScanLine Count
     INY
     STA WSYNC
-    LDA #$FF
     LDX #0
     STX PF1
     STX PF2 
-    STA ENAM0
     STX CTRLPF ; Control Mode Playfield to Lines
-    TYA
     ; Check Print Ball 
+    TYA
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
@@ -505,9 +516,10 @@ StartBorder:
 
 WaitStartLines:
     STA WSYNC
+    ; Increment Y-ScanLine Count
     INY
-    TYA
     ; Check Print Ball 
+    TYA
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
@@ -516,12 +528,13 @@ WaitStartLines:
     CPY #(SCAN_START_LINES-1)
     BCC WaitStartLines
     
+; Start Print Lines
     STY COUNT_SCANLINES
-; Print Lines
     LDX #(NUMBER_LINES-1)
     LDY #(HEIGHT_LINES-1)
     
 PrintLines:
+    ; Increment Memory ScanLine Count
     INC COUNT_SCANLINES
     STA WSYNC
     LDA COUNT_SCANLINES
@@ -543,23 +556,28 @@ PrintLines:
     LDA LINES_PFS3,X
     STA PF1
     PLA
+    ; Reset For New ScanLine
     LDA #0
     STA PF2
     STA PF0
-
+    ; Check Height of Current Color Line
     DEY
     BPL PrintLines
-    LDY #(HEIGHT_LINES-1)
-    
+; Transition Between Different Color Lines
+    ; Increment Memory ScanLine Count
     INC COUNT_SCANLINES
+    LDY #(HEIGHT_LINES-1)
     STA WSYNC
     LDA COUNT_SCANLINES
+    ; Check Print Ball 
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
     PHP
+    ; Set Line Color
     LDA LineColors,X
     STA COLUPF
+    ; Get PF of lines
     LDA LINES_PFS0,X
     STA PF1
     LDA LINES_PFS1,X
@@ -569,18 +587,21 @@ PrintLines:
     LDA LINES_PFS3,X
     STA PF1
     PLA
+    ; Reset For New ScanLine
     LDA #0
     STA PF2
     STA PF0
 
     DEX
     BPL PrintLines
-
+    
+; End of Color Lines
+    ; Get Current ScanLine Count
     LDY COUNT_SCANLINES
-; Stop Lines
     STA WSYNC
     STA PF1
     STA PF2
+    ; Increment Y-ScanLine Count
     INY
     TYA
     ; Check Print Ball 
@@ -592,6 +613,7 @@ PrintLines:
 
 WaitStartPlayer: 
     STA WSYNC
+    ; Increment Y-ScanLine Count
     INY
     TYA
     ; Check Print Ball 
@@ -604,6 +626,7 @@ WaitStartPlayer:
     BNE WaitStartPlayer
 
     STA WSYNC
+    ; Enable Print Player
     LDA #$FF
     STA GRP1
 
@@ -611,16 +634,20 @@ WaitStartPlayer:
 
     ; Print Player (Missile 1)
 PrintPlay:
+    ; Increment Y-ScanLine Count
     INY
     TYA
+    ; Check Print Ball
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
     PHP
     PLA
+    ; Decrease Player Height
     DEX
     STA WSYNC
     BNE PrintPlay
+    ; Increment Y-ScanLine Count
     INY
     TYA
     ; Check Print Ball 
@@ -629,7 +656,9 @@ PrintPlay:
     AND #($FF-HEIGHT_BALL)
     PHP
     PLA
-    STX GRP0 ; X:=0
+    ; Stop to Draw Borders and Player
+    ; X:=0
+    STX GRP0 
     STX GRP1
     STX ENAM0 
 
@@ -639,16 +668,19 @@ PrintPlay:
     ; Wait hot Scanlines over
 ScanlineEnd:
     TYA
+    ; Check Print Ball 
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
     PHP
     PLA
     STA WSYNC
+    ; Increment Y-ScanLine Count
     INY
     CPY #(KERNEL_SCANLINE-1)
     BNE ScanlineEnd
     
+    ; Restore Stack Pointer
     LDX #$FF
     TXS
 ;***********************************************************
@@ -667,7 +699,7 @@ Overscan:
     STA TIM64T
 
     INX ; X:=0
-    STX ENAM1               ; "Ball" below the screen
+    STX ENAM1               ; "Ball" below the screen (stop ball draw )
     STA WSYNC
 
 ;===================================================================
@@ -683,22 +715,22 @@ Overscan:
 ;                  COLLISION PROCESSING AREA
 ;===================================================================
 ; Collision Ball with wall or dead
+    ; Ball Alive? (BALL_STATUS:0 == 1)
     LDA BALL_STATUS
     AND #1
     BEQ NoCollision
-    ; Dead Ball?
+    ; Dead ball? (Ball BALL_PVERT > KERNEL_SCANLINE)
     LDA BALL_PVERT
     CMP #KERNEL_SCANLINE
     BCC CollPlayer
     LDA #$16
-    DEC COUNT_LIFE
     STA BALL_STATUS
     ; Collision Ball With Player
 CollPlayer:
     LDA CXM1P
     AND #$40
     BEQ CollVert
-    ; Player Collision
+    ; Player Collision set ball vertical move to up 
     LDA #$02
     ORA BALL_STATUS
     STA BALL_STATUS
@@ -707,7 +739,7 @@ CollVert:
     LDY BALL_PVERT
     CPY #(SCAN_START_BORDER+HEIGHT_BORDER+1)
     BCS CollHoriz
-    ; Top collision
+    ; Top collision set ball vertical move to down
     LDA #$FD
     AND BALL_STATUS
     STA BALL_STATUS
@@ -718,22 +750,22 @@ CollHoriz:
     ; Left
     CPY #25
     BCS CollCheckRight
+    ; Left collision set ball horizon move to right
     LDA #$04
     ORA BALL_STATUS
     STA BALL_STATUS
-
     JMP NoCollision
     ; Check Right Border
 CollCheckRight:
     ; Right
     CPY #126
     BCC NoCollision
+    ; Right collision set ball horizon move to left
     LDA #$FB
     AND BALL_STATUS
     STA BALL_STATUS
 
 NoCollision:
-    
     LDA #%01000010          ; "Turn Off Cathodic Ray"
     STA VBLANK      
 
