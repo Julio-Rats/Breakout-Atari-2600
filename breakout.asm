@@ -9,12 +9,16 @@
     INCLUDE "vcs.h"
     INCLUDE "macro.h"
 
-;===================================================================
-;===================================================================
-;                   Constantes
 
 ;===================================================================
-;                       NTSC
+;                     TV SYSTEM DEFINITION
+;===================================================================
+SYSTEM_TV = "NTSC"  ; (NTSC, PAL)
+
+;===================================================================
+;                       NTSC 60 FPS
+    IF SYSTEM_TV == "NTSC"
+;===================================================================
 KERNEL_SCANLINE     = 192
 SCAN_START_BORDER   = 16
 HEIGHT_LINES        = 8
@@ -33,24 +37,34 @@ LINE_COLOR5         = $C6
 LINE_COLOR6         = $86
 
 ;===================================================================
-;                       PAL
-; KERNEL_SCANLINE     = 228
-; SCAN_START_BORDER   = 24
-; HEIGHT_LINES        = 8
+;                       PAL 50 FPS
+    ELSE 
+        IF SYSTEM_TV == "PAL"
+;===================================================================
+KERNEL_SCANLINE     = 228
+SCAN_START_BORDER   = 24
+HEIGHT_LINES        = 8
 
-; VBLANK_TIMER        = 52
-; OVERSCAN_TIMER      = 45
+VBLANK_TIMER        = 52
+OVERSCAN_TIMER      = 45
 
-; BORDER_COLOR        = $08
-; PLAYER_COLOR        = $44
+BORDER_COLOR        = $08
+PLAYER_COLOR        = $44
 
-; LINE_COLOR1         = $62
-; LINE_COLOR2         = $64
-; LINE_COLOR3         = $46
-; LINE_COLOR4         = $26
-; LINE_COLOR5         = $56
-; LINE_COLOR6         = $D6
+LINE_COLOR1         = $62
+LINE_COLOR2         = $64
+LINE_COLOR3         = $46
+LINE_COLOR4         = $26
+LINE_COLOR5         = $56
+LINE_COLOR6         = $D6
 
+;===================================================================
+        ENDIF
+    ENDIF
+;===================================================================
+
+;===================================================================
+;                       Global Constants
 ;===================================================================
 PLAYER_LIFE         = 4
 NUMBER_LINES        = 6 
@@ -102,7 +116,7 @@ POINTER_LIFE    ds  2
     SEG   CODE
     ORG   $F000     ; Start of "Cart Area" (See Atari Memory Map)
 ;===================================================================
-;                       CPU ENTERPOINT
+;                       CPU ENTRYPOINT
 ;===================================================================
 BootGame:
     SEI
