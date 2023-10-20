@@ -68,10 +68,10 @@ SCAN_START_LINES    = (SCAN_START_BORDER + HEIGHT_BORDER + 21)
 
 ;===================================================================
 ;===================================================================
-;           VARIAVEIS RAM ($0080-$00FF)(128B RAM)
+;           VARIABLES RAM ($0080-$00FF)(128B RAM)
 
-    SEG.U VARIABLES
-    ORG   $80
+    SEG.U   VARIABLES
+    ORG     $80
 
 COUNT_FRAMES    ds  1
 SCORE_MASK      ds  1
@@ -118,36 +118,11 @@ ClearMemory:
     STA $CC,X
     BNE ClearMemory
 
-    ; Set Color
-    STA COLUBK
-    LDA #BORDER_COLOR
-    STA COLUP0
-    LDA #PLAYER_COLOR
-    STA COLUP1
-
-    ; Set Position of P0,P1,M0
-    LDY #$04
-    STA WSYNC
-    DEY
-    ;Delay PosP0
-PosPlayer0:
-    DEY
-    BPL PosPlayer0
-    NOP
-    STA RESP0
-    ;Delay PosM0
-    LDY #$05
-PosMissile0:
-    DEY
-    BPL PosMissile0
-    NOP
-    NOP
-    STA RESM0
-
     LDY #$08
+    ; Set Position of P1 and M1
     STA WSYNC
-    ; Delay PosP1 and PosM1
     DEY
+    ; Delay PosP1 and PosM1
 PosPlayer1:
     DEY
     BPL PosPlayer1
@@ -163,8 +138,6 @@ PosPlayer1:
     LDA #$16
     STA BALL_STATUS
     ; Apply move if exists in buffer
-    LDA #$F0
-    STA HMP0
     LDA #$20
     STA HMP1
     STA HMM1
@@ -174,18 +147,6 @@ PosPlayer1:
     STA WSYNC
     STA HMCLR
 
-    ; Set Size and Graph type
-    LDA #$30
-    STA NUSIZ0
-    LDA #$15
-    STA NUSIZ1
-    ; Control Mode Playfield to Score (No PlayField Reflect)
-    LDA #0
-    STA CTRLPF
-    ; Input Controls Set Mode Read
-    STA SWACNT 
-    STA SWBCNT 
-
     ; Reset Game and Set Pointers
     JSR ResetGame
     JSR SetScorePointers
@@ -194,7 +155,7 @@ PosPlayer1:
     STA VBLANK  
 
 ;===================================================================
-;                     NEW FRAME CYCLE
+;                         NEW FRAME CYCLE
 ;===================================================================
 StartFrame:
     LDA #$02            ; Vertical sync is signaled by VSYNC's bit 1...
@@ -214,13 +175,57 @@ WsynWait:
     
 ;===================================================================
 ;===================================================================
-;                     Vblank code area
+;                       Vblank code area
 ;===================================================================
 ;===================================================================
+    ; Increment Count Frames
     INC COUNT_FRAMES
+    
+    ; Set Size and Graph type
+    LDA #$30
+    STA NUSIZ0
+    LDA #$15
+    STA NUSIZ1
+    ; Control Mode Playfield to Score (No PlayField Reflect)
+    LDA #0
+    STA CTRLPF
+    ; Input Controls Set Mode Read
+    STA SWACNT 
+    STA SWBCNT 
+    ; Reset Vertical Delay
+    STA VDELP0
+    STA VDELP1
+    STA VDELBL
+    ; Set Color
+    STA COLUBK
+    LDA #BORDER_COLOR
+    STA COLUP0
+    LDA #PLAYER_COLOR
+    STA COLUP1
+
+    ; Set Position of P1 and M1
+    LDY #$04
+    ;Delay PosP0
+    STA WSYNC
+    DEY
+PosPlayer0:
+    DEY
+    BPL PosPlayer0
+    NOP
+    STA RESP0
+    ;Delay PosM0
+    LDY #$05
+PosMissile0:
+    DEY
+    BPL PosMissile0
+    NOP
+    NOP
+    STA RESM0
+    LDA #$F0
+    STA HMP0
 
 ;===================================================================
-;               INPUT CONTROL PROCESSING AREA
+;                  INPUT CONTROL PROCESSING AREA
 ;===================================================================
     ; Reset Switches
     LDA SWCHB
@@ -478,9 +483,7 @@ WaitPrintBord:
     ; Not use the Left Part of the Playfild 1
     STX PF1
     STA PF2 
-    ; Use Missile P0 to Make Right Border
-    STA ENAM0
-
+    
     ; Make UP border
 StartBorder:
     ; Increment Y-ScanLine Count
@@ -498,10 +501,13 @@ StartBorder:
     ; Trick Using Stack Pointer To Print "Ball" (Missile P1)
     LDX #ENAM1
     TXS
+
 ; StopBord:
     ; Increment Y-ScanLine Count
     INY
     STA WSYNC
+    ; Use Missile P0 to Make Right Border
+    STA ENAM0
     LDX #0
     STX PF1
     STX PF2 
@@ -661,6 +667,7 @@ PrintPlay:
     STX GRP0 
     STX GRP1
     STX ENAM0 
+    STX ENABL
 
 ;=============================================================================================
 ;                                  OVERSCAN
@@ -769,7 +776,10 @@ NoCollision:
     LDA #%01000010          ; "Turn Off Cathodic Ray"
     STA VBLANK      
 
-    ; Wait Rest of Existing OverScan (Async Clock)
+;=============================================================================================
+;                                 END OVERSCAN
+;=============================================================================================
+; Wait Rest of Existing OverScan (Async Clock)
 WaintOverscanEnd:           ; Timing OverScanlines
     LDA INTIM
     BNE WaintOverscanEnd
@@ -804,13 +814,13 @@ OutAjust:
 ResetGame:
     ; Set PF Color Lines (Reset Lines)
     LDX #(NUMBER_LINES-1)
-SetPFColorLines:
     LDA #$3F
+    LDY #$FF
+SetPFColorLines:
     STA LINES_PFS0,X 
-    LDA #$FF
-    STA LINES_PFS1,X
-    STA LINES_PFS2,X
-    STA LINES_PFS3,X
+    STY LINES_PFS1,X
+    STY LINES_PFS2,X
+    STY LINES_PFS3,X
     DEX
     BPL SetPFColorLines
     INX     ;X:=0

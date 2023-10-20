@@ -1,7 +1,7 @@
 ; MACRO.H
 ; Version 1.09, 05/SEP/2020
 
-VERSION_MACRO         = 109
+VERSION_MACRO = 109
 
 ;
 ; THIS FILE IS EXPLICITLY SUPPORTED AS A DASM-PREFERRED COMPANION FILE
@@ -56,27 +56,27 @@ VERSION_MACRO         = 109
 ; LEGAL OPCODE VERSION MAY AFFECT FLAGS
 ; Uses illegal opcode (DASM 2.20.01 onwards).
 
-            MAC SLEEP            ;usage: SLEEP n (n>1)
-.CYCLES     SET {1}
+    MAC SLEEP       ;usage: SLEEP n (n>1)
+        .CYCLES SET {1}
 
-                IF .CYCLES < 2
-                    ECHO "MACRO ERROR: 'SLEEP': Duration must be > 1"
-                    ERR
-                ENDIF
+        IF .CYCLES < 2
+            ECHO "MACRO ERROR: 'SLEEP': Duration must be > 1"
+            ERR
+        ENDIF
 
-                IF .CYCLES & 1
-                    IFNCONST NO_ILLEGAL_OPCODES
-                        nop 0
-                    ELSE
-                        bit VSYNC
-                    ENDIF
-.CYCLES             SET .CYCLES - 3
-                ENDIF
-            
-                REPEAT .CYCLES / 2
-                    nop
-                REPEND
-            ENDM
+        IF .CYCLES & 1
+            IFNCONST NO_ILLEGAL_OPCODES
+                nop 0
+            ELSE
+                bit VSYNC
+            ENDIF
+            .CYCLES SET .CYCLES - 3
+        ENDIF
+                
+        REPEAT .CYCLES / 2
+            nop
+        REPEND
+    ENDM
 
 ;-------------------------------------------------------------------------------
 ; VERTICAL_SYNC
@@ -86,13 +86,13 @@ VERSION_MACRO         = 109
 
 ; OUT: A = 0
 
-             MAC VERTICAL_SYNC
-                lda #%1110          ; each '1' bits generate a VSYNC ON line (bits 1..3)
-.VSLP1          sta WSYNC           ; 1st '0' bit resets Vsync, 2nd '0' bit exit loop
-                sta VSYNC
-                lsr
-                bne .VSLP1          ; branch until VYSNC has been reset
-             ENDM
+    MAC VERTICAL_SYNC
+        lda #%1110          ; each '1' bits generate a VSYNC ON line (bits 1..3)
+        .VSLP1 sta WSYNC    ; 1st '0' bit resets Vsync, 2nd '0' bit exit loop
+        sta VSYNC
+        lsr
+        bne .VSLP1          ; branch until VYSNC has been reset
+    ENDM
 
 ;-------------------------------------------------------------------------------
 ; CLEAN_START
@@ -103,23 +103,23 @@ VERSION_MACRO         = 109
 ; Use as very first section of code on boot (ie: at reset)
 ; Code written to minimise total ROM usage - uses weird 6502 knowledge :)
 
-            MAC CLEAN_START
-                sei
-                cld
+    MAC CLEAN_START
+        sei
+        cld
             
-                IFNCONST NO_ILLEGAL_OPCODES
-                    lxa #0
-                ELSE
-                    ldx #0
-                    txa
-                ENDIF
-                tay
-.CLEAR_STACK    dex
-                txs
-                pha
-                bne .CLEAR_STACK     ; SP=$FF, X = A = Y = 0
-
-            ENDM
+        IFNCONST NO_ILLEGAL_OPCODES
+            lxa #0
+        ELSE
+            ldx #0
+            txa
+        ENDIF
+        
+        tay
+        .CLEAR_STACK    dex
+        txs
+        pha
+        bne .CLEAR_STACK     ; SP=$FF, X = A = Y = 0
+    ENDM
 
 ;-------------------------------------------------------
 ; SET_POINTER
@@ -134,16 +134,15 @@ VERSION_MACRO         = 109
 ; IN 1: 2 byte RAM location reserved for pointer
 ; IN 2: absolute address
 
-            MAC SET_POINTER
-.POINTER    SET {1}
-.ADDRESS    SET {2}
+    MAC SET_POINTER
+        .POINTER    SET {1}
+        .ADDRESS    SET {2}
 
-                LDA #<.ADDRESS  ; Get Lowbyte of Address
-                STA .POINTER    ; Store in pointer
-                LDA #>.ADDRESS  ; Get Hibyte of Address
-                STA .POINTER+1  ; Store in pointer+1
-
-            ENDM
+        LDA #<.ADDRESS  ; Get Lowbyte of Address
+        STA .POINTER    ; Store in pointer
+        LDA #>.ADDRESS  ; Get Hibyte of Address
+        STA .POINTER+1  ; Store in pointer+1
+    ENDM
 
 ;-------------------------------------------------------
 ; BOUNDARY byte#
@@ -155,16 +154,15 @@ VERSION_MACRO         = 109
 ; eg: BOUNDARY 5    ; position at byte #5 in page
 
 .FREE_BYTES SET 0   
-   MAC BOUNDARY
-      REPEAT 256
-         IF <. % {1} = 0
-            MEXIT
-         ELSE
-.FREE_BYTES SET .FREE_BYTES + 1
-            .byte $00
-         ENDIF
-      REPEND
-   ENDM
-
+    MAC BOUNDARY
+        REPEAT 256
+            IF <. % {1} = 0
+                MEXIT
+            ELSE
+                .FREE_BYTES SET .FREE_BYTES + 1
+                .byte $00
+            ENDIF
+        REPEND
+    ENDM
 
 ; EOF
