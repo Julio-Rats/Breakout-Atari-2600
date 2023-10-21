@@ -18,7 +18,7 @@ SYSTEM_TV = "NTSC"  ; (NTSC, PAL)
 ;===================================================================
 ;                       NTSC 60 FPS
     IF SYSTEM_TV == "NTSC"
-;===================================================================
+
 KERNEL_SCANLINE     = 192
 SCAN_START_BORDER   = 16
 HEIGHT_LINES        = 8
@@ -40,7 +40,7 @@ LINE_COLOR6         = $86
 ;                       PAL 50 FPS
     ELSE 
         IF SYSTEM_TV == "PAL"
-;===================================================================
+
 KERNEL_SCANLINE     = 228
 SCAN_START_BORDER   = 24
 HEIGHT_LINES        = 8
@@ -59,6 +59,9 @@ LINE_COLOR5         = $56
 LINE_COLOR6         = $D6
 
 ;===================================================================
+;                          OTHERS
+        ELSE
+            ECHO "TV SYSTEM NOT SUPPORTED!"
         ENDIF
     ENDIF
 ;===================================================================
@@ -163,7 +166,7 @@ PosPlayer1:
 
     ; Reset Game and Set Pointers
     JSR ResetGame
-    JSR SetScorePointers
+    JSR SetInfoDigitPointers
 
     LDA #%01000010  ; Starting Vblank
     STA VBLANK  
@@ -461,7 +464,7 @@ StartScore:
     NOP
     INY
     STA PF2
-    CPY #10     ; Lenght Bitmap (tile) of Digits (10 rows)
+    CPY #10     ; Length Bitmap (tile) of Digits (10 rows)
     BCC StartScore
 
 ; After Score Area
@@ -684,7 +687,7 @@ PrintPlay:
     STX ENABL
 
 ;=============================================================================================
-;                                  OVERSCAN
+;                                     OVERSCAN
 ;=============================================================================================
     ; Wait hot Scanlines over
 ScanlineEnd:
@@ -725,15 +728,15 @@ Overscan:
 
 ;===================================================================
 ;===================================================================
-;                     Overscan Code Area
+;                      Overscan Code Area
 ;===================================================================
 ;===================================================================
     ; Score Test (Auto Increment Every Frame)
-    JSR SetScorePointers
+    JSR SetInfoDigitPointers
     JSR AddScore
 
 ;===================================================================
-;                  COLLISION PROCESSING AREA
+;                   COLLISION PROCESSING AREA
 ;===================================================================
 ; Collision Ball with wall or dead
     ; Ball Alive? (BALL_STATUS:0 == 1)
@@ -801,15 +804,15 @@ WaintOverscanEnd:           ; Timing OverScanlines
 
 ;=============================================================================================
 ;=============================================================================================
-;             				FUNCTION DECLARATION
+;             				  FUNCTION DECLARATION
 ;=============================================================================================
 ;=============================================================================================
 
-; FUNCTION AjustPointerScore (A:=A+20*X):
+; FUNCTION AjustPointerDigit (A:=A+20*X):
 ;   Apply n sums of 20 in to register A
 ;   where n is the value in register x
 ;   If sum generate carry, Y incremented
-AjustPointerScore:
+AjustPointerDigit:
     CPX #0
     BEQ OutAjust
 NoCheckZero:
@@ -851,9 +854,9 @@ SetPFColorLines:
     STA COUNT_LIFE
     RTS
 
-; FUNCTION SetScorePointers (None):
-;   Set Score Graph Bitmap Pointers to Current Score
-SetScorePointers:
+; FUNCTION SetInfoDigitPointers (None):
+;   Set Score Graph Bitmap Pointers to Current Score and Count Life
+SetInfoDigitPointers:
     ; Score Pointer
     ; Get BCD of Digit 0 (Most Significant Digit)
     LDA SCORE
@@ -864,7 +867,7 @@ ShiftScoreDigit0:
     LSR
     DEX
     BNE ShiftScoreDigit0
-    ; Adjusts the pointer to the digit, using the function 'AjustPointerScore' 
+    ; Adjusts the pointer to the digit, using the function 'AjustPointerDigit' 
     TAX
     CPX #0
     BEQ DigitBlank
@@ -876,7 +879,7 @@ DigitBlank:
     LDA #<DataEmpty
     LDY #>DataEmpty
 DigitAjust:
-    JSR AjustPointerScore
+    JSR AjustPointerDigit
     STA POINTER_SCORE
     STY POINTER_SCORE+1
     ; Get BCD of Digit 2
@@ -888,11 +891,11 @@ ShiftScoreDigit2:
     LSR
     DEX
     BNE ShiftScoreDigit2
-    ; Adjusts the pointer to the digit, using the function 'AjustPointerScore' 
+    ; Adjusts the pointer to the digit, using the function 'AjustPointerDigit' 
     TAX
     LDA #<Data0R
     LDY #>Data0R
-    JSR AjustPointerScore
+    JSR AjustPointerDigit
     STA POINTER_SCORE+4
     STY POINTER_SCORE+5
     ; Get BCD of Digit 1
@@ -901,24 +904,24 @@ ShiftScoreDigit2:
     TAX
     LDA #<Data0
     LDY #>Data0
-    JSR AjustPointerScore
+    JSR AjustPointerDigit
     STA POINTER_SCORE+2
     STY POINTER_SCORE+3
     ; Get BCD of Digit 3
     LDA SCORE+1
     AND #$0F
-    ; Adjusts the pointer to the digit, using the function 'AjustPointerScore' 
+    ; Adjusts the pointer to the digit, using the function 'AjustPointerDigit' 
     TAX
     LDA #<Data0R
     LDY #>Data0R
-    JSR AjustPointerScore
+    JSR AjustPointerDigit
     STA POINTER_SCORE+6
     STY POINTER_SCORE+7
     ; Ajust Pointer for Count Life
     LDX COUNT_LIFE
     LDA #<Data0
     LDY #>Data0
-    JSR AjustPointerScore
+    JSR AjustPointerDigit
     STA POINTER_LIFE
     STY POINTER_LIFE+1
     RTS
