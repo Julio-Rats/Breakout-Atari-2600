@@ -90,7 +90,7 @@ SCAN_START_LINES    = (SCAN_START_BORDER + HEIGHT_BORDER + 21)
     SEG.U   VARIABLES
     ORG     $80
 
-COUNT_FRAMES    ds  1
+RANDOM_NUMBER   ds  1
 SCORE_MASK      ds  1
 COUNT_SCANLINES ds  1
 COUNT_LIFE      ds  1
@@ -135,8 +135,12 @@ ClearMemory:
     STA $CC,X
     BNE ClearMemory
 
+    ; Get seed for random generation
+    LDA INTIM
+    STA RANDOM_NUMBER
+
     LDY #$08
-    ; Set Position of P1 and M1
+    ; Set Position of P1 and M1 (Plataform)
     STA WSYNC
     DEY
     ; Delay PosP1 and PosM1
@@ -145,7 +149,7 @@ PosPlayer1:
     BPL PosPlayer1
     STA RESP1
     STA RESM1
-    ; Set Pos P1 and M1(ball) (H,V) in Memory
+    ; Set Pos P1 and M1(ball) (H,V) in Memory 
     LDA #68
     STA PLAYER_POS
     LDA #75
@@ -195,9 +199,6 @@ WsynWait:
 ;                       Vblank code area
 ;===================================================================
 ;===================================================================
-    ; Increment Count Frames
-    INC COUNT_FRAMES
-    
     ; Set Size and Graph type
     LDA #$30
     STA NUSIZ0
@@ -220,7 +221,7 @@ WsynWait:
     LDA #PLAYER_COLOR
     STA COLUP1
 
-    ; Set Position of P1 and M1
+    ; Set Position of P0 and M0 (Side Borders)
     LDY #$04
     ;Delay PosP0
     STA WSYNC
@@ -269,7 +270,7 @@ Fire:
     ; "Use" life
     DEC COUNT_LIFE
     ; Ball Parameter Defaults
-    LDA COUNT_FRAMES    
+    LDA RANDOM_NUMBER    
     AND #$04            ; Random Horz Start (Left or Right)
     ORA #$13
     STA BALL_STATUS
@@ -734,6 +735,8 @@ Overscan:
     ; Score Test (Auto Increment Every Frame)
     JSR SetInfoDigitPointers
     JSR AddScore
+    ; Random Number Generation Test
+    JSR RandNumber
 
 ;===================================================================
 ;                   COLLISION PROCESSING AREA
@@ -940,6 +943,15 @@ AddScore:
     CLD
     RTS
     
+RandNumber:
+    LDA RANDOM_NUMBER
+    LSR
+    BCS NoEOR
+    EOR #$D4
+NoEOR:
+    STA RANDOM_NUMBER
+    RTS
+
 ;=============================================================================================
 ;             				  DATA DECLARATION
 ;=============================================================================================
