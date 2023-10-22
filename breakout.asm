@@ -24,7 +24,7 @@ SCAN_START_BORDER   = 16
 HEIGHT_LINES        = 8
 
 VBLANK_TIMER        = 43
-OVERSCAN_TIMER      = 38
+OVERSCAN_TIMER      = 37
 
 BORDER_COLOR        = $04
 PLAYER_COLOR        = $F4
@@ -46,7 +46,7 @@ SCAN_START_BORDER   = 24
 HEIGHT_LINES        = 8
 
 VBLANK_TIMER        = 52
-OVERSCAN_TIMER      = 45
+OVERSCAN_TIMER      = 44
 
 BORDER_COLOR        = $08
 PLAYER_COLOR        = $44
@@ -82,6 +82,7 @@ LAST_SCANLINE       = KERNEL_SCANLINE-3
 SCAN_START_SCORE    = (SCAN_START_BORDER-10)-2
 SCAN_POS_PLAYER     = (LAST_SCANLINE - HEIGHT_PLAYER)
 SCAN_START_LINES    = (SCAN_START_BORDER + HEIGHT_BORDER + 21)
+TAPS                = $B8
 
 ;===================================================================
 ;===================================================================
@@ -176,23 +177,19 @@ PosPlayer1:
     JSR SetInfoDigitPointers
 
     LDA #%01000010  ; Starting Vblank
-    STA VBLANK  
+    STA VBLANK
 
 ;===================================================================
 ;                         NEW FRAME CYCLE
 ;===================================================================
 StartFrame:
-    LDA #$02            ; Vertical sync is signaled by VSYNC's bit 1...
-    STA VSYNC
+    LDA #%00001110      ; Vertical sync is signaled by VSYNC's bit 1...
 
-    ; ...waiting 3 scanlines
-    LDX #03
 WsynWait:    
-    DEX
     STA WSYNC           ; (WSYNC write => wait for end of scanline)
+    STA VSYNC
+    LSR
     BNE WsynWait
-
-    STX VSYNC   ;X:=0   ; Signal vertical sync by clearing the bit (Start Vblank)
 
     LDA #VBLANK_TIMER   ; Timing Vblank Scanlines
     STA TIM64T
@@ -723,12 +720,14 @@ ScanlineEnd:
 ;=============================================================================================
 ;=============================================================================================
 Overscan:
+    LDA #%01000010          ; "Turn Off Cathodic Ray"
+    STA VBLANK 
+
     LDA #OVERSCAN_TIMER     ; Timing OverScanlines
     STA TIM64T
 
     INX ; X:=0
     STX ENAM1               ; "Ball" below the screen (stop ball draw )
-    STA WSYNC
 
 ;===================================================================
 ;===================================================================
@@ -794,11 +793,8 @@ CollCheckRight:
     LDA #$FB
     AND BALL_STATUS
     STA BALL_STATUS
-
 NoCollision:
-    LDA #%01000010          ; "Turn Off Cathodic Ray"
-    STA VBLANK      
-
+    
 ;=============================================================================================
 ;                                 END OVERSCAN
 ;=============================================================================================
@@ -946,11 +942,12 @@ AddScore:
     CLD
     RTS
     
+; Linear-feedback Shift Register
 RandNumber:
     LDA RANDOM_NUMBER
-    LSR
+    LSR 
     BCC NoEOR
-    EOR #$D4
+    EOR #TAPS
 NoEOR:
     STA RANDOM_NUMBER
     RTS

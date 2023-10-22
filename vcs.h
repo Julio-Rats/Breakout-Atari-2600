@@ -197,20 +197,7 @@ SWCHB       ds 1    ; $282		Port B data (console switches)
 SWBCNT      ds 1    ; $283      Port B DDR
 INTIM       ds 1    ; $284	    Timer output
 TIMINT      ds 1    ; $285  	Unused/undefined registers ($285-$294)
-            ds 1	; $286
-            ds 1	; $287
-            ds 1	; $288
-            ds 1	; $289
-            ds 1	; $28A
-            ds 1	; $28B
-            ds 1	; $28C
-            ds 1	; $28D
-            ds 1	; $28E
-            ds 1	; $28F
-            ds 1	; $290
-            ds 1	; $291
-            ds 1	; $292
-            ds 1	; $293
+            ds 14   ; $286--$293
 TIM1T       ds 1    ; $294 		set 1 clock interval
 TIM8T       ds 1    ; $295      set 8 clock interval
 TIM64T      ds 1    ; $296      set 64 clock interval
