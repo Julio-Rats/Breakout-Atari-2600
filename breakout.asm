@@ -137,6 +137,9 @@ ClearMemory:
 
     ; Get seed for random generation
     LDA INTIM
+    BNE NoNULLSeed
+    LDA #1
+NoNULLSeed:
     STA RANDOM_NUMBER
 
     LDY #$08
@@ -946,7 +949,7 @@ AddScore:
 RandNumber:
     LDA RANDOM_NUMBER
     LSR
-    BCS NoEOR
+    BCC NoEOR
     EOR #$D4
 NoEOR:
     STA RANDOM_NUMBER
