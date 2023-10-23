@@ -1,7 +1,7 @@
-; Utilizado o DASM para compilar
-; veja em https://github.com/Julio-Rats/dasm
+; Used DASM to compile
+;   see https://github.com/Julio-Rats/dasm
 ;
-; Comando para compilar:
+; Command to compile:
 ;   dasm breakout.asm -obreakout.bin -f3
 ;
 
@@ -802,7 +802,7 @@ NoCollision:
 WaintOverscanEnd:           ; Timing OverScanlines
     LDA INTIM
     BNE WaintOverscanEnd
-    JMP StartFrame          ; Back to Start  
+    JMP StartFrame          ; Back to Start
 
 ;=============================================================================================
 ;=============================================================================================
@@ -942,7 +942,9 @@ AddScore:
     CLD
     RTS
     
-; Linear-feedback Shift Register
+; FUNCTION RandNumber (None):
+;   Get next random number
+;   Based in Linear-feedback Shift Register
 RandNumber:
     LDA RANDOM_NUMBER
     LSR 
@@ -1182,9 +1184,8 @@ Data0R:
     .BYTE #%01000100
     .BYTE #%01000100
 
-    ORG $FFFA
+    ORG $FFFC
 
-    .WORD StartFrame    ; NMI
     .WORD BootGame      ; EntryPoint
-    .WORD BootGame      ; IRQ/BRK
+    .WORD BootGame      ; IRQ/BRK (Not Used in Atari 2600)
 END
