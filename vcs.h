@@ -163,8 +163,8 @@ INPT0       ds 1    ; $08       x000 0000       Read Pot Port 0
 INPT1       ds 1    ; $09       x000 0000       Read Pot Port 1
 INPT2       ds 1    ; $0A       x000 0000       Read Pot Port 2
 INPT3       ds 1    ; $0B       x000 0000       Read Pot Port 3
-INPT4       ds 1    ; $0C		x000 0000       Read Input (Trigger) 0
-INPT5       ds 1    ; $0D		x000 0000       Read Input (Trigger) 1
+INPT4       ds 1    ; $0C       x000 0000       Read Input (Trigger) 0
+INPT5       ds 1    ; $0D       x000 0000       Read Input (Trigger) 1
 
 ;-------------------------------------------------------------------------------
 
