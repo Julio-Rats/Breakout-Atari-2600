@@ -70,20 +70,23 @@ LINE_COLOR6         = $D6
 ;                       Global Constants
 ;===================================================================
 PLAYER_LIFE         = 4
-NUMBER_LINES        = 6 
+NUMBER_LINES        = 6
+NUMBER_SOUNDS       = 4
 HEIGHT_BORDER       = 16
 HEIGHT_PLAYER       = 4
 HEIGHT_BALL         = 3
+LAST_SCANLINE       = (KERNEL_SCANLINE-3)
 SPEED_LEFT          = 3
 SPEED_LEFT_HEX      = $30
 SPEED_RIGHT         = 3
 SPEED_RIGHT_HEX     = $D0
-LAST_SCANLINE       = KERNEL_SCANLINE-3
-SCAN_START_SCORE    = (SCAN_START_BORDER-10)-2
+SCAN_START_SCORE    = (SCAN_START_BORDER-12)
 SCAN_POS_PLAYER     = (LAST_SCANLINE - HEIGHT_PLAYER)
 SCAN_START_LINES    = (SCAN_START_BORDER + HEIGHT_BORDER + 21)
+SOUND_FRAME         = 5
+SOUND_VOLUME        = $0E
+SOUND_CTRL          = $0C
 TAPS                = $B8
-
 ;===================================================================
 ;===================================================================
 ;           VARIABLES RAM ($0080-$00FF)(128B RAM)
@@ -99,6 +102,8 @@ LINES_PFS0      ds  NUMBER_LINES
 LINES_PFS1      ds  NUMBER_LINES
 LINES_PFS2      ds  NUMBER_LINES
 LINES_PFS3      ds  NUMBER_LINES
+DESTROY_LINE    ds  2
+DESTROY_MASK    ds  1
 PLAYER_POS      ds  1
 BALL_PHORZ      ds  1
 BALL_PVERT      ds  1
@@ -112,7 +117,8 @@ BALL_STATUS     ds  1
 SCORE           ds  2
 POINTER_SCORE   ds  8
 POINTER_LIFE    ds  2
-
+SOUND_FCTRL     ds  1
+SOUND_MCTRL     ds  1
 ;===================================================================
 ;===================================================================
 ;                       CODE SEGMENT
@@ -158,7 +164,7 @@ PosPlayer1:
     STA PLAYER_POS
     LDA #75
     STA BALL_PHORZ
-    LDA #KERNEL_SCANLINE
+    LDA #(KERNEL_SCANLINE-10)
     STA BALL_PVERT
     LDA #$16
     STA BALL_STATUS
@@ -174,8 +180,13 @@ PosPlayer1:
 
     ; Reset Game and Set Pointers
     JSR ResetGame
-    JSR SetInfoDigitPointers
-
+    ; Sound Control
+    LDA #$0C
+    STA AUDC0
+    ; Sound Freq
+    LDA #1
+    STA SOUND_MCTRL
+    
     LDA #%01000010  ; Starting Vblank
     STA VBLANK
 
@@ -199,6 +210,8 @@ WsynWait:
 ;                       Vblank code area
 ;===================================================================
 ;===================================================================
+    ;Check Stop Sound
+    JSR CheckSound
     ; Set Size and Graph type
     LDA #$30
     STA NUSIZ0
@@ -270,10 +283,12 @@ Fire:
     ; "Use" life
     DEC COUNT_LIFE
     ; Ball Parameter Defaults
-    LDA RANDOM_NUMBER    
+    LDA RANDOM_NUMBER
     AND #$04            ; Random Horz Start (Left or Right)
     ORA #$13
     STA BALL_STATUS
+    LDA #(SCAN_POS_PLAYER-HEIGHT_BALL)
+    STA BALL_PVERT
     ; Get input controls to move the player (platform)
 Controllers:
     LDX SWCHA
@@ -382,6 +397,9 @@ BallMoved:
     STA HMM1
 NoMoveBall:
 
+    ; Life and Score Set Graph
+    JSR SetInfoDigitPointers
+
 ; PreparePlayfield:     ; Preparing graph registers to start hot scanlines
     LDA #BORDER_COLOR
     STA COLUPF
@@ -411,7 +429,7 @@ WaitVblankEnd:
 ;=============================================================================================
 ;=============================================================================================
 ;=============================================================================================
-
+;
 ;                         PRINT SCREEN MOMENT (HOT SCANLINES)
 ;
 ;   Start Visible Scanlines
@@ -682,9 +700,9 @@ PrintPlay:
     PLA
     ; Stop to Draw Borders and Player
     ; X:=0
-    STX GRP0 
+    STX GRP0
     STX GRP1
-    STX ENAM0 
+    STX ENAM0
     STX ENABL
 
 ;=============================================================================================
@@ -721,7 +739,7 @@ ScanlineEnd:
 ;=============================================================================================
 Overscan:
     LDA #%01000010          ; "Turn Off Cathodic Ray"
-    STA VBLANK 
+    STA VBLANK
 
     LDA #OVERSCAN_TIMER     ; Timing OverScanlines
     STA TIM64T
@@ -734,9 +752,6 @@ Overscan:
 ;                      Overscan Code Area
 ;===================================================================
 ;===================================================================
-    ; Score Test (Auto Increment Every Frame)
-    JSR SetInfoDigitPointers
-    JSR AddScore
     ; Random Number Generation Test
     JSR RandNumber
 
@@ -747,53 +762,65 @@ Overscan:
     ; Ball Alive? (BALL_STATUS:0 == 1)
     LDA BALL_STATUS
     AND #1
-    BEQ NoCollision
+    BEQ NoBallCollision
     ; Dead ball? (Ball BALL_PVERT > KERNEL_SCANLINE)
     LDA BALL_PVERT
     CMP #KERNEL_SCANLINE
-    BCC CollPlayer
+    BCC BallCollPlayer
     LDA #$16
     STA BALL_STATUS
     ; Collision Ball With Player
-CollPlayer:
+BallCollPlayer:
     LDA CXM1P
     AND #$40
-    BEQ CollVert
+    BEQ BallCollVert
     ; Player Collision set ball vertical move to up 
     LDA #$02
     ORA BALL_STATUS
     STA BALL_STATUS
+    JSR MakeSound
+    JSR CheckEndLines
     ; Collision Ball With Top Bord
-CollVert:
+BallCollVert:
     LDY BALL_PVERT
     CPY #(SCAN_START_BORDER+HEIGHT_BORDER+1)
-    BCS CollHoriz
+    BCS BallCollHoriz
     ; Top collision set ball vertical move to down
     LDA #$FD
     AND BALL_STATUS
     STA BALL_STATUS
+    JSR MakeSound
     ; Collision Ball With Lateral Bords
     ; Check Left Border
-CollHoriz:
+BallCollHoriz:
     LDY BALL_PHORZ
     ; Left
     CPY #25
-    BCS CollCheckRight
+    BCS BallCollCheckRight
     ; Left collision set ball horizon move to right
     LDA #$04
     ORA BALL_STATUS
     STA BALL_STATUS
-    JMP NoCollision
+    JSR MakeSound
+    JMP BallLinesCollision ; If you collided on the left, you won't need to check on the right.
     ; Check Right Border
-CollCheckRight:
+BallCollCheckRight:
     ; Right
     CPY #126
-    BCC NoCollision
+    BCC BallLinesCollision
     ; Right collision set ball horizon move to left
     LDA #$FB
     AND BALL_STATUS
     STA BALL_STATUS
-NoCollision:
+    JSR MakeSound
+    ; Check ball collision with playfield (Color lines)
+BallLinesCollision:
+    LDA CXM1FB
+    AND #$80
+    BEQ NoBallCollision
+    JSR DestroyLine
+
+NoBallCollision:
     
 ;=============================================================================================
 ;                                 END OVERSCAN
@@ -828,20 +855,40 @@ NoCarryPointer:
 OutAjust:
     RTS
 
-; FUNCTION ResetGame (None):
-;   Restore Ball, Life, Color Lines and Score
-ResetGame:
-    ; Set PF Color Lines (Reset Lines)
+; FUNCTION ResetLines (None):
+ResetLines:
     LDX #(NUMBER_LINES-1)
     LDA #$3F
     LDY #$FF
 SetPFColorLines:
     STA LINES_PFS0,X 
     STY LINES_PFS1,X
+    LDY #$F0
     STY LINES_PFS2,X
+    LDY #$FF
     STY LINES_PFS3,X
     DEX
     BPL SetPFColorLines
+    RTS
+
+; FUNCTION CheckEndLines (None):
+CheckEndLines:
+    LDY #0
+CheckLinesLoop:
+    LDA LINES_PFS0,Y
+    BNE CheckOut
+    INY
+    CPY #(NUMBER_LINES*4)
+    BNE CheckLinesLoop
+    JMP ResetLines
+CheckOut: 
+    RTS
+
+; FUNCTION ResetGame (None):
+;   Restore Ball, Life, Color Lines and Score
+ResetGame:
+    ; Set PF Color Lines (Reset Lines)
+    JSR ResetLines
     INX     ;X:=0
 
     ; Reset Score
@@ -854,7 +901,7 @@ SetPFColorLines:
     ; Reset Life
     LDA #PLAYER_LIFE
     STA COUNT_LIFE
-    RTS
+    RTS 
 
 ; FUNCTION SetInfoDigitPointers (None):
 ;   Set Score Graph Bitmap Pointers to Current Score and Count Life
@@ -941,7 +988,198 @@ AddScore:
     STA SCORE
     CLD
     RTS
+
+; FUNCTION DestroyLine (None):
+;   Removes bit from the playfield referring to the colidade line
+DestroyLine:
+    ; Check which horizontal playfield bank collided
+    LDY BALL_PHORZ
+    DEY
+    LDA BALL_STATUS
+    AND #$04
+    BEQ BallMovedLeft
+    INY
+    INY
+BallMovedLeft:
+    ; First Bank
+    CPY #48
+    BPL SecPFBank
+    ; Bank PF0 (Map 6-LSB)
+    LDX #<LINES_PFS0
     
+    CPY #32
+    BPL FS2
+    ; FS1
+    LDY #$0F
+    STY DESTROY_MASK
+    JMP OutBank
+FS2:
+    CPY #40
+    BPL FS3
+    ; FS2
+    LDY #$F3
+    STY DESTROY_MASK
+    JMP OutBank
+FS3:
+    ; FS3
+    LDY #$FC
+    STY DESTROY_MASK
+    JMP OutBank
+
+    ; Second Bank
+SecPFBank: ; Inverted Bank
+    CPY #80
+    BPL ThirdPFBank
+    ; Bank PF1 (Map Byte Inverted)
+    LDX #<LINES_PFS1
+    
+    CPY #56
+    BPL SS2
+    ; SS1
+    LDY #$FC
+    STY DESTROY_MASK
+    JMP OutBank
+SS2:
+    CPY #64
+    BPL SS3
+    ; SS2
+    LDY #$F3
+    STY DESTROY_MASK
+    JMP OutBank
+SS3:
+    CPY #72
+    BPL SS4
+    ; SS3
+    LDY #$CF
+    STY DESTROY_MASK
+    JMP OutBank
+SS4:
+    ; SS4
+    LDA #$3F
+    STA DESTROY_MASK
+    JMP OutBank
+
+    ; Third Bank
+ThirdPFBank:
+    CPY #96
+    BPL FourthPFBank
+    ; Bank PF2 (Map 4-MSB Inverted)
+    LDX #<LINES_PFS2
+
+    CPY #88
+    BPL TS2
+    ; TS1
+    LDY #$CF
+    STY DESTROY_MASK
+    JMP OutBank
+TS2:
+    ; TS2
+    LDY #$3F
+    STY DESTROY_MASK
+    JMP OutBank
+
+    ; Fourth Bank
+FourthPFBank:
+    ; Bank PF3 (Map Byte)
+    LDX #<LINES_PFS3
+
+    CPY #104
+    BPL FtS2
+    ; FtS1
+    LDY #$3F
+    STY DESTROY_MASK
+    JMP OutBank
+FtS2:
+    CPY #112
+    BPL FtS3
+    ; FS2
+    LDY #$CF
+    STY DESTROY_MASK
+    JMP OutBank
+FtS3:
+    CPY #120
+    BPL FtS4
+    ; FS3
+    LDY #$F3
+    STY DESTROY_MASK
+    JMP OutBank
+FtS4:
+    ; FtS4
+    LDY #$FC
+    STY DESTROY_MASK
+    ; JMP OutBank
+
+OutBank:
+    STX DESTROY_LINE
+
+    LDA BALL_STATUS
+    AND #$02
+    BEQ BallMoveDown
+    ;Ball move UP
+    LDA #(SCAN_START_LINES+(HEIGHT_LINES+1)*(NUMBER_LINES-1)+(HEIGHT_LINES-HEIGHT_BALL)-1)
+    LDY #0
+
+LoopBallUP:
+    LDX #$02
+    CMP BALL_PVERT
+    BMI RemovePFLine
+    SEC
+    SBC #(HEIGHT_LINES-HEIGHT_BALL)
+
+    LDX #$04
+    CMP BALL_PVERT
+    BMI RemovePFLine
+
+    SEC
+    SBC #(HEIGHT_BALL+1)
+
+    INY
+    CPY #(NUMBER_LINES-1)
+    BNE LoopBallUP
+
+    JMP RemovePFLine
+
+BallMoveDown:
+    LDA #(SCAN_START_LINES-3+(HEIGHT_BALL))
+    LDY #(NUMBER_LINES-1)
+
+LoopBallDown
+    LDX #$02
+    CMP BALL_PVERT
+    BPL RemovePFLine
+    CLC
+    ADC #(HEIGHT_LINES-HEIGHT_BALL)
+
+    LDX #$04
+    CMP BALL_PVERT
+    BPL RemovePFLine
+
+    CLC
+    ADC #(HEIGHT_BALL+1)
+
+    DEY
+    BNE LoopBallDown
+
+RemovePFLine:
+    LDA DESTROY_MASK
+    EOR #$FF
+    AND (DESTROY_LINE),Y
+    BEQ JustRemove
+
+    LDA DESTROY_MASK
+    AND (DESTROY_LINE),Y
+    STA (DESTROY_LINE),Y
+
+    TXA
+    EOR BALL_STATUS
+    STA BALL_STATUS
+    LDY #2
+    JSR MakeSound
+    JMP AddScore    ; Trick JMP, not JSR
+
+JustRemove:
+    RTS
+
 ; FUNCTION RandNumber (None):
 ;   Get next random number
 ;   Based in Linear-feedback Shift Register
@@ -954,9 +1192,49 @@ NoEOR:
     STA RANDOM_NUMBER
     RTS
 
+; FUNCTION NoSound (None):
+NoSound:
+    LDA #0
+    STA AUDV0
+    STA AUDC0
+    RTS
+
+; FUNCTION MakeSound (None):
+MakeSound:
+    LDY SOUND_MCTRL
+    BNE CircList
+    LDA #NUMBER_SOUNDS
+    STA SOUND_MCTRL
+CircList:
+    DEC SOUND_MCTRL
+    LDA SoundGame,Y
+    STA AUDF0
+    LDA #SOUND_CTRL
+    STA AUDC0
+    LDA #SOUND_VOLUME
+    STA AUDV0
+    LDA #SOUND_FRAME
+    STA SOUND_FCTRL
+    RTS
+
+; FUNCTION CheckSound (None):
+CheckSound:
+    LDY SOUND_FCTRL
+    BEQ CheckSoundOut
+    DEY
+    STY SOUND_FCTRL
+    BNE CheckSoundOut
+    JMP NoSound ; Trick JMP, no JSR
+
+CheckSoundOut:
+    RTS
 ;=============================================================================================
 ;             				  DATA DECLARATION
 ;=============================================================================================
+; Sounds Frequency
+SoundGame:
+    .BYTE #$0A, #$08, #$06, #$04
+
 ;   Colors Lines Hex Code
 LineColors:
     ; Load Colors of lines
