@@ -38,7 +38,7 @@ LINE_COLOR6         = $86
 
 ;===================================================================
 ;                       PAL 50 FPS
-    ELSE 
+    ELSE
         IF SYSTEM_TV == "PAL"
 
 KERNEL_SCANLINE     = 228
@@ -159,7 +159,7 @@ PosPlayer1:
     BPL PosPlayer1
     STA RESP1
     STA RESM1
-    ; Set Pos P1 and M1(ball) (H,V) in Memory 
+    ; Set Pos P1 and M1(ball) (H,V) in Memory
     LDA #68
     STA PLAYER_POS
     LDA #75
@@ -186,7 +186,7 @@ PosPlayer1:
     ; Sound Freq
     LDA #1
     STA SOUND_MCTRL
-    
+
     LDA #%01000010  ; Starting Vblank
     STA VBLANK
 
@@ -196,7 +196,7 @@ PosPlayer1:
 StartFrame:
     LDA #%00001110      ; Vertical sync is signaled by VSYNC's bit 1...
 
-WsynWait:    
+WsynWait:
     STA WSYNC           ; (WSYNC write => wait for end of scanline)
     STA VSYNC
     LSR
@@ -204,7 +204,7 @@ WsynWait:
 
     LDA #VBLANK_TIMER   ; Timing Vblank Scanlines
     STA TIM64T
-    
+
 ;===================================================================
 ;===================================================================
 ;                       Vblank code area
@@ -221,8 +221,8 @@ WsynWait:
     LDA #0
     STA CTRLPF
     ; Input Controls Set Mode Read
-    STA SWACNT 
-    STA SWBCNT 
+    STA SWACNT
+    STA SWBCNT
     ; Reset Vertical Delay
     STA VDELP0
     STA VDELP1
@@ -277,7 +277,7 @@ P_Control:
     JMP Controllers
     ; Ball is dead and button is push
 Fire:
-    ; Verify Count Life 
+    ; Verify Count Life
     LDA COUNT_LIFE
     BEQ Controllers
     ; "Use" life
@@ -319,7 +319,7 @@ MovePlayerLeft:
     SBC #SPEED_LEFT
     JMP SetMovemtMemory
 
-MovePlayerRight: 
+MovePlayerRight:
     ; Get current position, verify bounds, apply move based on movement of Player
     LDA PLAYER_POS
     CMP #111
@@ -347,7 +347,7 @@ ShiftSpeedBall:
     LSR
     DEX
     BNE ShiftSpeedBall
-    ; Save in Register X 
+    ; Save in Register X
     TAX
     ; Move Vertical
     TYA
@@ -365,10 +365,10 @@ MoveBallUP:
     TXA
     CLC
     ADC BALL_PVERT
-    
+
 MoveHorz:    ; efficient ROM Space
     ; Save in Memory Vertical movement of Ball
-    STA BALL_PVERT 
+    STA BALL_PVERT
     ; Move Horizontal
     TYA
     AND #4
@@ -415,7 +415,7 @@ WaitVblankEnd:
     ; Apply Moves in Buffers
     STA HMOVE
     ; Clear Collisions (New Frame)
-    STA CXCLR 
+    STA CXCLR
     STA WSYNC
     ; Clear Buffer of Moves
     STA HMCLR
@@ -443,7 +443,7 @@ WaitPrintScore:
     ; Start Print Score and Life Counter
     STY COUNT_SCANLINES
     LDY #0
-StartScore: 
+StartScore:
     ;D0-1
     ; Get bitmap for the nº line of the Digit 0 (Most Significant Digit)
     LDA (POINTER_SCORE),Y
@@ -499,7 +499,7 @@ StartScore:
     TAY
     ; Control Reflect Playfield for the Color Lines (No Reflection)
     LDA #$01
-    STA CTRLPF   
+    STA CTRLPF
 
     ; Wait to Print Borders
 WaitPrintBord:
@@ -518,8 +518,8 @@ WaitPrintBord:
     STA GRP0
     ; Not use the Left Part of the Playfild 1
     STX PF1
-    STA PF2 
-    
+    STA PF2
+
     ; Make UP border
 StartBorder:
     ; Increment Y-ScanLine Count
@@ -527,11 +527,11 @@ StartBorder:
     STA WSYNC
     CPY #(SCAN_START_BORDER+HEIGHT_BORDER-1)
     BCC StartBorder
-    
+
 ;***********************************************************
 ;       Start Stack Call Danger Zone (Don't use JSR)
 ;***********************************************************
-;   Do not use stack or JSR inside danger zone, 
+;   Do not use stack or JSR inside danger zone,
 ;    use stack only for print ball
 
     ; Trick Using Stack Pointer To Print "Ball" (Missile P1)
@@ -546,9 +546,9 @@ StartBorder:
     STA ENAM0
     LDX #0
     STX PF1
-    STX PF2 
+    STX PF2
     STX CTRLPF ; Control Mode Playfield to Lines
-    ; Check Print Ball 
+    ; Check Print Ball
     TYA
     SEC
     SBC BALL_PVERT
@@ -560,7 +560,7 @@ WaitStartLines:
     STA WSYNC
     ; Increment Y-ScanLine Count
     INY
-    ; Check Print Ball 
+    ; Check Print Ball
     TYA
     SEC
     SBC BALL_PVERT
@@ -569,18 +569,18 @@ WaitStartLines:
     PLA
     CPY #(SCAN_START_LINES-1)
     BCC WaitStartLines
-    
+
 ; Start Print Lines
     STY COUNT_SCANLINES
     LDX #(NUMBER_LINES-1)
     LDY #(HEIGHT_LINES-1)
-    
+
 PrintLines:
     ; Increment Memory ScanLine Count
     INC COUNT_SCANLINES
     STA WSYNC
     LDA COUNT_SCANLINES
-    ; Check Print Ball 
+    ; Check Print Ball
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
@@ -611,7 +611,7 @@ PrintLines:
     LDY #(HEIGHT_LINES-1)
     STA WSYNC
     LDA COUNT_SCANLINES
-    ; Check Print Ball 
+    ; Check Print Ball
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
@@ -636,7 +636,7 @@ PrintLines:
 
     DEX
     BPL PrintLines
-    
+
 ; End of Color Lines
     ; Get Current ScanLine Count
     LDY COUNT_SCANLINES
@@ -646,19 +646,19 @@ PrintLines:
     ; Increment Y-ScanLine Count
     INY
     TYA
-    ; Check Print Ball 
+    ; Check Print Ball
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
     PHP
     PLA
 
-WaitStartPlayer: 
+WaitStartPlayer:
     STA WSYNC
     ; Increment Y-ScanLine Count
     INY
     TYA
-    ; Check Print Ball 
+    ; Check Print Ball
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
@@ -692,7 +692,7 @@ PrintPlay:
     ; Increment Y-ScanLine Count
     INY
     TYA
-    ; Check Print Ball 
+    ; Check Print Ball
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
@@ -711,7 +711,7 @@ PrintPlay:
     ; Wait hot Scanlines over
 ScanlineEnd:
     TYA
-    ; Check Print Ball 
+    ; Check Print Ball
     SEC
     SBC BALL_PVERT
     AND #($FF-HEIGHT_BALL)
@@ -722,7 +722,7 @@ ScanlineEnd:
     INY
     CPY #(KERNEL_SCANLINE-1)
     BNE ScanlineEnd
-    
+
     ; Restore Stack Pointer
     LDX #$FF
     TXS
@@ -752,7 +752,7 @@ Overscan:
 ;                      Overscan Code Area
 ;===================================================================
 ;===================================================================
-    ; Random Number Generation Test
+    ; Random Number Generation
     JSR RandNumber
 
 ;===================================================================
@@ -774,7 +774,7 @@ BallCollPlayer:
     LDA CXM1P
     AND #$40
     BEQ BallCollVert
-    ; Player Collision set ball vertical move to up 
+    ; Player Collision set ball vertical move to up
     LDA #$02
     ORA BALL_STATUS
     STA BALL_STATUS
@@ -821,7 +821,7 @@ BallLinesCollision:
     JSR DestroyLine
 
 NoBallCollision:
-    
+
 ;=============================================================================================
 ;                                 END OVERSCAN
 ;=============================================================================================
@@ -861,7 +861,7 @@ ResetLines:
     LDA #$3F
     LDY #$FF
 SetPFColorLines:
-    STA LINES_PFS0,X 
+    STA LINES_PFS0,X
     STY LINES_PFS1,X
     LDY #$F0
     STY LINES_PFS2,X
@@ -881,7 +881,7 @@ CheckLinesLoop:
     CPY #(NUMBER_LINES*4)
     BNE CheckLinesLoop
     JMP ResetLines
-CheckOut: 
+CheckOut:
     RTS
 
 ; FUNCTION ResetGame (None):
@@ -890,7 +890,6 @@ ResetGame:
     ; Set PF Color Lines (Reset Lines)
     JSR ResetLines
     INX     ;X:=0
-
     ; Reset Score
     STX SCORE
     STX SCORE+1
@@ -901,7 +900,7 @@ ResetGame:
     ; Reset Life
     LDA #PLAYER_LIFE
     STA COUNT_LIFE
-    RTS 
+    RTS
 
 ; FUNCTION SetInfoDigitPointers (None):
 ;   Set Score Graph Bitmap Pointers to Current Score and Count Life
@@ -916,7 +915,7 @@ ShiftScoreDigit0:
     LSR
     DEX
     BNE ShiftScoreDigit0
-    ; Adjusts the pointer to the digit, using the function 'AjustPointerDigit' 
+    ; Adjusts the pointer to the digit, using the function 'AjustPointerDigit'
     TAX
     CPX #0
     BEQ DigitBlank
@@ -940,7 +939,7 @@ ShiftScoreDigit2:
     LSR
     DEX
     BNE ShiftScoreDigit2
-    ; Adjusts the pointer to the digit, using the function 'AjustPointerDigit' 
+    ; Adjusts the pointer to the digit, using the function 'AjustPointerDigit'
     TAX
     LDA #<Data0R
     LDY #>Data0R
@@ -959,7 +958,7 @@ ShiftScoreDigit2:
     ; Get BCD of Digit 3
     LDA SCORE+1
     AND #$0F
-    ; Adjusts the pointer to the digit, using the function 'AjustPointerDigit' 
+    ; Adjusts the pointer to the digit, using the function 'AjustPointerDigit'
     TAX
     LDA #<Data0R
     LDY #>Data0R
@@ -983,9 +982,11 @@ AddScore:
     CLC
     ADC #1
     STA SCORE+1
+    BCC NoCarryADD
     LDA SCORE
     ADC #0
     STA SCORE
+NoCarryADD:
     CLD
     RTS
 
@@ -1006,7 +1007,7 @@ BallMovedLeft:
     BPL SecPFBank
     ; Bank PF0 (Map 6-LSB)
     LDX #<LINES_PFS0
-    
+
     CPY #32
     BPL FS2
     ; FS1
@@ -1032,7 +1033,7 @@ SecPFBank: ; Inverted Bank
     BPL ThirdPFBank
     ; Bank PF1 (Map Byte Inverted)
     LDX #<LINES_PFS1
-    
+
     CPY #56
     BPL SS2
     ; SS1
@@ -1185,7 +1186,7 @@ JustRemove:
 ;   Based in Linear-feedback Shift Register
 RandNumber:
     LDA RANDOM_NUMBER
-    LSR 
+    LSR
     BCC NoEOR
     EOR #TAPS
 NoEOR:
@@ -1193,6 +1194,7 @@ NoEOR:
     RTS
 
 ; FUNCTION NoSound (None):
+;   Disables any sound in the game
 NoSound:
     LDA #0
     STA AUDV0
@@ -1200,6 +1202,8 @@ NoSound:
     RTS
 
 ; FUNCTION MakeSound (None):
+;   Generates a sound
+;   The generated sound follows a circular list of sound types (frequencies)
 MakeSound:
     LDY SOUND_MCTRL
     BNE CircList
@@ -1218,6 +1222,8 @@ CircList:
     RTS
 
 ; FUNCTION CheckSound (None):
+;   Checks end of a sound
+;   Checks if the current sound has already consumed the desired number of frames
 CheckSound:
     LDY SOUND_FCTRL
     BEQ CheckSoundOut
@@ -1250,7 +1256,7 @@ DataEmpty:
     ; Empty
     .BYTE #0,#0,#0,#0,#0,#0,#0,#0,#0,#0
 Data0:
-    ;0 
+    ;0
     .BYTE #%11101110
     .BYTE #%11101110
     .BYTE #%10101010
@@ -1272,7 +1278,7 @@ Data0R:
     .BYTE #%01010101
     .BYTE #%01110111
     .BYTE #%01110111
-    ;1 
+    ;1
     .BYTE #%01000100
     .BYTE #%01000100
     .BYTE #%01000100
@@ -1313,7 +1319,7 @@ Data0R:
     .BYTE #%00010001
     .BYTE #%00010001
     .BYTE #%01110111
-    .BYTE #%01110111  
+    .BYTE #%01110111
     ;3
     .BYTE #%11101110
     .BYTE #%11101110
