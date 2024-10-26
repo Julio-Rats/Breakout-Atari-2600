@@ -2,7 +2,7 @@
 
 # Breakout
 
-<img  align="MIDDLE" width="1200" height="700" src="https://github.com/Julio-Rats/Breakout-Atari-2600/blob/master/Print%20Game.png"/>
+<img  align="MIDDLE" width="1080" height="720" src="https://github.com/Julio-Rats/Breakout-Atari-2600/blob/master/Print%20Game.png"/>
 <br>
 
   ## Development in progress
