@@ -9,4 +9,10 @@
 </div>
 <br>
 
-  * Difficulty Progression Control 
+  * Difficulty Progression Control
+
+<br>
+
+### Note:
+
+This was the first game I made for the Atari 2600, so it was a learning experience. I need to review the code and apply improvements and optimizations, which I plan to acquire over time after this implementation.
